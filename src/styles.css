@@ -13,6 +13,39 @@
   --green: #6bcca5;
   --panel: #16191f;
 }
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #655478 #171920;
+  overscroll-behavior: contain;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-track {
+  background: #171920;
+}
+*::-webkit-scrollbar-thumb {
+  background: #655478;
+  border: 2px solid #171920;
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #9d80c2;
+}
+*::-webkit-scrollbar-corner {
+  background: #171920;
+}
 .merge-preview {
   display: flex;
   align-items: center;
@@ -134,11 +167,158 @@ kbd {
 }
 .app-shell {
   height: 100vh;
-  min-height: 650px;
+  min-height: 0;
   display: grid;
   grid-template-columns: 242px minmax(0, 1fr);
   grid-template-rows: 55px minmax(0, 1fr) 28px;
   overflow: hidden;
+  width: 100%;
+  max-width: 100vw;
+  max-height: 100dvh;
+}
+.main,
+.titlebar,
+.statusbar,
+.repo-toolbar,
+.content-area,
+.primary-panel,
+.changes-layout {
+  min-width: 0;
+  max-width: 100%;
+}
+.title-right {
+  min-width: 0;
+}
+.title-right .update-button {
+  font-size: 0.83rem;
+  background: #322a40;
+  border-color: #604c77;
+  color: #d7c2f9;
+  padding: 6px 9px;
+}
+.group-heading {
+  display: flex;
+  align-items: center;
+  margin: 14px 0 5px;
+}
+.group-heading .group-label {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 7px;
+  margin: 0;
+}
+.group-label > span:not(.count) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.group-options {
+  opacity: 0;
+}
+.group-heading:hover .group-options,
+.group-heading:focus-within .group-options {
+  opacity: 1;
+}
+.custom-select {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+.select-trigger {
+  width: 100%;
+  min-width: 0;
+  justify-content: space-between;
+  background: #14161d;
+  color: #d8dbe5;
+  padding: 10px 11px;
+  border: 1px solid #343745;
+  text-align: left;
+  font-size: 1rem;
+}
+.select-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.select-trigger[aria-expanded="true"] {
+  border-color: #9677bb;
+  background: #24202e;
+}
+.select-validator {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  border: 0;
+  left: 0;
+  bottom: 0;
+}
+.select-popup {
+  position: fixed;
+  z-index: 100;
+  overflow: auto;
+  padding: 5px;
+  background: #211e2b;
+  border: 1px solid #584466;
+  border-radius: 7px;
+  box-shadow: 0 12px 35px #0009;
+}
+.select-popup [role="option"] {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #c4b9d4;
+  text-align: left;
+  padding: 9px 10px;
+  font-size: 0.92rem;
+}
+.select-popup [role="option"] > span {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.select-popup [role="option"][data-highlight="true"],
+.select-popup [role="option"]:focus-visible {
+  background: #3d304d;
+  outline: 0;
+}
+.select-popup [role="option"][aria-selected="true"] {
+  color: #e0cafa;
+}
+.select-empty {
+  padding: 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.filter-select .custom-select {
+  width: 140px;
+}
+.filter-select .select-trigger {
+  border: 0;
+  background: transparent;
+  padding: 5px 0;
+  font-size: 0.83rem;
+}
+.statusbar .status-branch-button {
+  color: #c6b1e7;
+  padding: 3px 5px;
+  max-width: 240px;
+}
+.status-branch-button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.statusbar > span {
+  min-width: 0;
+}
+.app-shell[data-animations="true"] .select-popup {
+  animation: popup-in 120ms ease-out both;
 }
 .titlebar {
   grid-column: 1/-1;
@@ -149,6 +329,20 @@ kbd {
   border-bottom: 1px solid var(--line);
   padding: 0 20px;
   gap: 28px;
+}
+.titlebar .brand {
+  min-width: 0;
+  flex-shrink: 1;
+}
+.titlebar .quick-search {
+  min-width: 160px;
+  max-width: 365px;
+  flex: 1 1 365px;
+}
+.titlebar .title-right {
+  min-width: 0;
+  flex-shrink: 0;
+  gap: 12px;
 }
 .brand {
   display: flex;
@@ -185,6 +379,7 @@ kbd {
 .title-caption {
   font-size: 0.9167rem;
   color: #828798;
+  min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 .quick-search {
   width: 365px;

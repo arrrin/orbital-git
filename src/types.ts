@@ -47,7 +47,9 @@ export type WorkingState = Pick<
 export interface Repo {
   path: string;
   name: string;
+  group: string;
 }
 export interface Workspace {
   repos: Repo[];
+  groups: string[];
 }

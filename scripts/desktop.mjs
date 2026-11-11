@@ -10,6 +10,15 @@ const env = {
   ...process.env,
   PATH: `${cargoBin}${delimiter}${process.env.PATH ?? ""}`,
 };
+const signingKey = join(homedir(), ".tauri", "orbital-git.key");
+if (
+  process.argv[2] === "build" &&
+  existsSync(signingKey) &&
+  !env.TAURI_SIGNING_PRIVATE_KEY
+) {
+  env.TAURI_SIGNING_PRIVATE_KEY = signingKey;
+  env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ??= "";
+}
 if (
   spawnSync("cargo", ["--version"], { env, windowsHide: true }).status !== 0
 ) {

@@ -41,7 +41,7 @@ fn load_workspace(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
         .map_err(|e| e.to_string())?
         .join("workspace.json");
     if !file.exists() {
-        return Ok(serde_json::json!({"repos": []}));
+        return Ok(serde_json::json!({"repos": [],"groups":["Workspace"]}));
     }
     serde_json::from_slice(&std::fs::read(file).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())
@@ -58,16 +58,22 @@ fn save_workspace(app: tauri::AppHandle, workspace: serde_json::Value) -> Result
     .map_err(|e| e.to_string())?;
     std::fs::rename(temporary, dir.join("workspace.json")).map_err(|e| e.to_string())
 }
+#[tauri::command]
+fn restart_app(app: tauri::AppHandle) {
+    app.restart();
+}
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             repository,
             working_state,
             execute,
             diff,
             load_workspace,
-            save_workspace
+            save_workspace,
+            restart_app
         ])
         .run(tauri::generate_context!())
         .expect("Unable to start Orbital");

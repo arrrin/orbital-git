@@ -4,4 +4,8 @@ target/
 *.tsbuildinfo
 src-tauri/gen/schemas/
 *.log
+*.key
+*.key.pub
+test-results/
+playwright-report/
 .DS_Store

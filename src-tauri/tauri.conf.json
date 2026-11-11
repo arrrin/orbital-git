@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Orbital",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "identifier": "dev.orbital.git",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -30,6 +30,18 @@
     ],
     "icon": [
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFEMDZCMjk4MkMyNjRCQTIKUldTaVN5WXNtTElHSGRJT3VwVEJtZWt5Q0F5ck9aZitSbUNJakFpNy9vZUpmT2JTL1NYbkFxMSsK",
+      "endpoints": [
+        "https://github.com/arrrin/orbital-git/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

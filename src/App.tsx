@@ -54,6 +54,9 @@ import ResizeHandle from "./ResizeHandle";
 import RepoContextMenu from "./RepoContextMenu";
 import { defaults, preferenceKey, readPreferences } from "./preferences";
 import { optimisticIndex } from "./index-state";
+import Select from "./Select";
+import { normalizeWorkspace } from "./workspace";
+import { useAppUpdates } from "./useAppUpdates";
 import { layoutGraph } from "./graph";
 import type {
   Commit,
@@ -114,6 +117,7 @@ function IconButton({
 export default function App() {
   const [workspace, setWorkspace] = useState<Workspace>({
     repos: [],
+    groups: [],
   });
   const [active, setActive] = useState("");
   const [snapshots, setSnapshots] = useState<Record<string, Snapshot>>({});
@@ -122,7 +126,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [repoQuery, setRepoQuery] = useState("");
   const [branchFilter, setBranchFilter] = useState("all");
-  const [busy, setBusy] = useState("");
+  const [gitBusy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [modal, setModal] = useState<Modal | null>(null);
@@ -133,8 +137,35 @@ export default function App() {
     x: number;
     y: number;
   } | null>(null);
+  const [groupMenu, setGroupMenu] = useState<{
+    name: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
   const [summaries, setSummaries] = useState<Record<string, WorkingState>>({});
   const [indexPending, setIndexPending] = useState<Record<string, number>>({});
+  const updates = useAppUpdates(
+    !gitBusy && !Object.values(indexPending).some(Boolean),
+  );
+  const busy = gitBusy || (updates.isInstalling ? "app update" : "");
+  const updateDisabled =
+    !!gitBusy ||
+    Object.values(indexPending).some(Boolean) ||
+    updates.phase === "checking" ||
+    (updates.isInstalling && updates.phase !== "installed");
+  const updateLabel =
+    updates.phase === "installed"
+      ? "Restart to finish"
+      : updates.phase === "downloading"
+        ? `Downloading ${updates.progress === null ? "…" : updates.progress + "%"}`
+        : updates.isInstalling
+          ? "Installing…"
+          : `Update to ${updates.version}`;
+  const applyUpdate = () =>
+    void (
+      updates.phase === "installed" ? updates.restart() : updates.install()
+    ).catch((error) => setError(String(error)));
   const [fetchErrors, setFetchErrors] = useState<Record<string, string>>({});
   const [lastFetched, setLastFetched] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
@@ -170,6 +201,7 @@ export default function App() {
     (r) => r.path === (modal?.value ?? active),
   );
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const closeGroupMenu = useCallback(() => setGroupMenu(null), []);
   useEffect(() => {
     document.documentElement.style.setProperty(
       "--ui-font",
@@ -225,10 +257,7 @@ export default function App() {
       .load()
       .then((w) => {
         if (!mounted.current) return;
-        // Legacy groups are discarded; repository paths and display names are kept.
-        setWorkspace({
-          repos: w.repos.map(({ path, name }) => ({ path, name })),
-        });
+        setWorkspace(normalizeWorkspace(w));
         setActive(w.repos[0]?.path ?? "");
         setReady(true);
       })
@@ -433,6 +462,7 @@ export default function App() {
   );
   const run = useCallback(
     async (action: string, args: string[] = [], path = active) => {
+      if (updates.isInstalling) return false;
       if (["stage", "unstage", "stage-all"].includes(action))
         return changeIndex(action, args, path);
       if (lock.current) return false;
@@ -472,10 +502,11 @@ export default function App() {
         setBusy("");
       }
     },
-    [active, refresh, changeIndex],
+    [active, refresh, changeIndex, updates.isInstalling],
   );
   useEffect(() => {
-    if (!ready || !desktop || !preferences.fetchMinutes) return;
+    if (!ready || !desktop || !preferences.fetchMinutes || updates.isInstalling)
+      return;
     let cancelled = false;
     const fetchAll = async () => {
       if (fetchCycle.current) return;
@@ -526,6 +557,7 @@ export default function App() {
     workspace.repos,
     refresh,
     refreshWorking,
+    updates.isInstalling,
   ]);
   const save = async (w: Workspace) => {
     try {
@@ -537,7 +569,10 @@ export default function App() {
       return false;
     }
   };
-  const addRepo = async (path: string) => {
+  const addRepo = async (
+    path: string,
+    group = workspace.groups[0] ?? "Workspace",
+  ) => {
     try {
       const snapshot = await api.snapshot(path);
       const existing = workspace.repos.find(
@@ -551,7 +586,7 @@ export default function App() {
         ...workspace,
         repos: [
           ...workspace.repos,
-          { path: snapshot.path, name: basename(snapshot.path) },
+          { path: snapshot.path, name: basename(snapshot.path), group },
         ],
       };
       if (await save(next)) {
@@ -712,12 +747,51 @@ export default function App() {
   const submitModal = async () => {
     if (!modal) return;
     const value = form.value?.trim() ?? "";
+    if (modal.kind === "group-add" || modal.kind === "group-rename") {
+      const name = value || (modal.kind === "group-rename" ? modal.value : "");
+      if (!name) return;
+      if (workspace.groups.includes(name) && name !== modal.value) {
+        setError("A group with this name already exists.");
+        return;
+      }
+      const next =
+        modal.kind === "group-add"
+          ? { ...workspace, groups: [...workspace.groups, name] }
+          : {
+              groups: workspace.groups.map((g) =>
+                g === modal.value ? name : g,
+              ),
+              repos: workspace.repos.map((r) =>
+                r.group === modal.value ? { ...r, group: name } : r,
+              ),
+            };
+      if (await save(next)) setModal(null);
+      return;
+    }
+    if (modal.kind === "group-remove") {
+      const remaining = workspace.groups.filter((g) => g !== modal.value);
+      if (!remaining.length) {
+        setError("Keep at least one repository group.");
+        return;
+      }
+      if (
+        await save({
+          groups: remaining,
+          repos: workspace.repos.map((r) =>
+            r.group === modal.value ? { ...r, group: remaining[0] } : r,
+          ),
+        })
+      )
+        setModal(null);
+      return;
+    }
     if (modal.kind === "add") {
-      await addRepo(value);
+      await addRepo(value, form.group || workspace.groups[0]);
       return;
     }
     if (modal.kind === "init") {
-      if (await run("init", [], value)) await addRepo(value);
+      if (await run("init", [], value))
+        await addRepo(value, form.group || workspace.groups[0]);
       return;
     }
     if (modal.kind === "remote") {
@@ -730,7 +804,9 @@ export default function App() {
         await save({
           ...workspace,
           repos: workspace.repos.map((r) =>
-            r.path === modalRepo.path ? { ...r, name: value || r.name } : r,
+            r.path === modalRepo.path
+              ? { ...r, name: value || r.name, group: form.group || r.group }
+              : r,
           ),
         })
       )
@@ -760,7 +836,7 @@ export default function App() {
       }
       const destination = parent.replace(/[\\/]$/, "") + "/" + form.name.trim();
       if (await run("clone", [value, destination], parent))
-        await addRepo(destination);
+        await addRepo(destination, form.group || workspace.groups[0]);
       return;
     }
     if (modal.kind === "worktree") {
@@ -883,6 +959,17 @@ export default function App() {
         </button>
         <div className="title-right">
           <span className="version">v{packageInfo.version}</span>
+          {updates.version && (
+            <button
+              className="update-button"
+              disabled={updateDisabled}
+              onClick={applyUpdate}
+              title={updates.error || "Download and install the signed update"}
+            >
+              <ArrowDownToLine size={13} />
+              {updateLabel}
+            </button>
+          )}
           <span className="avatar">Y</span>
         </div>
       </header>
@@ -905,6 +992,12 @@ export default function App() {
         <div className="sidebar-heading">
           <span>REPOSITORIES</span>
           <div>
+            <IconButton
+              title="Create repository group"
+              onClick={() => showModal("group-add", "Create repository group")}
+            >
+              <FolderPlus size={15} />
+            </IconButton>
             <IconButton title="Open repository" onClick={() => void pick()}>
               <Plus size={17} />
             </IconButton>
@@ -920,76 +1013,131 @@ export default function App() {
           <kbd>/</kbd>
         </div>
         <div className="repository-list">
-          {workspace.repos
-            .filter((r) =>
-              r.name.toLowerCase().includes(repoQuery.toLowerCase()),
-            )
-            .map((r) => {
-              const state = snapshots[r.path] ?? summaries[r.path];
-              const menu = (x: number, y: number) =>
-                setContextMenu({ repo: r, x, y });
-              return (
-                <div className="repo-entry" key={r.path}>
-                  <button
-                    className={
-                      "repo-item " + (active === r.path ? "active" : "")
-                    }
-                    onClick={() => setActive(r.path)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      menu(e.clientX, e.clientY);
-                    }}
-                    onKeyDown={(e) => {
-                      if (
-                        e.key === "ContextMenu" ||
-                        (e.shiftKey && e.key === "F10")
-                      ) {
-                        e.preventDefault();
-                        const b = e.currentTarget.getBoundingClientRect();
-                        menu(b.left + 30, b.top + 20);
-                      }
-                    }}
-                    title={
-                      fetchErrors[r.path]
-                        ? "Background fetch failed: " + fetchErrors[r.path]
-                        : r.path
-                    }
-                  >
-                    <div className="repo-icon">
-                      <FolderGit2 size={19} />
-                    </div>
-                    <div className="repo-info">
-                      <strong>{r.name}</strong>
-                      <span>
-                        <GitBranch size={11} />
-                        {state?.branch ?? "Loading…"}
-                        {state && state.ahead > 0 && (
-                          <i className="ahead">↑{state.ahead}</i>
-                        )}
-                        {state && state.behind > 0 && <i>↓{state.behind}</i>}
-                      </span>
-                    </div>
-                    {fetchErrors[r.path] ? (
-                      <Bell size={12} className="fetch-error-icon" />
-                    ) : state && state.files.length > 0 ? (
-                      <span className="dirty-count">{state.files.length}</span>
-                    ) : (
-                      <span className="clean-dot" />
-                    )}
-                  </button>
-                  <button
-                    className="repo-options icon-button"
-                    aria-label={"Options for " + r.name}
-                    onClick={(e) => {
-                      const b = e.currentTarget.getBoundingClientRect();
-                      menu(b.right, b.bottom);
-                    }}
-                  >
-                    <MoreHorizontal size={15} />
-                  </button>
-                </div>
-              );
-            })}
+          {workspace.groups.map((group) => (
+            <section key={group} className="repo-group">
+              <div
+                className="group-heading"
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setGroupMenu({
+                    name: group,
+                    x: event.clientX,
+                    y: event.clientY,
+                  });
+                }}
+              >
+                <button
+                  className="group-label"
+                  onClick={() =>
+                    setCollapsedGroups((groups) =>
+                      groups.includes(group)
+                        ? groups.filter((g) => g !== group)
+                        : [...groups, group],
+                    )
+                  }
+                >
+                  {collapsedGroups.includes(group) ? (
+                    <ChevronRight size={12} />
+                  ) : (
+                    <ChevronDown size={12} />
+                  )}
+                  <Folder size={12} />
+                  <span>{group}</span>
+                  <span className="count">
+                    {workspace.repos.filter((r) => r.group === group).length}
+                  </span>
+                </button>
+                <button
+                  className="icon-button group-options"
+                  aria-label={"Options for group " + group}
+                  onClick={(event) => {
+                    const box = event.currentTarget.getBoundingClientRect();
+                    setGroupMenu({ name: group, x: box.right, y: box.bottom });
+                  }}
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+              </div>
+              {!collapsedGroups.includes(group) &&
+                workspace.repos
+                  .filter(
+                    (r) =>
+                      r.group === group &&
+                      r.name.toLowerCase().includes(repoQuery.toLowerCase()),
+                  )
+                  .map((r) => {
+                    const state = snapshots[r.path] ?? summaries[r.path];
+                    const menu = (x: number, y: number) =>
+                      setContextMenu({ repo: r, x, y });
+                    return (
+                      <div className="repo-entry" key={r.path}>
+                        <button
+                          className={
+                            "repo-item " + (active === r.path ? "active" : "")
+                          }
+                          onClick={() => setActive(r.path)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            menu(e.clientX, e.clientY);
+                          }}
+                          onKeyDown={(e) => {
+                            if (
+                              e.key === "ContextMenu" ||
+                              (e.shiftKey && e.key === "F10")
+                            ) {
+                              e.preventDefault();
+                              const b = e.currentTarget.getBoundingClientRect();
+                              menu(b.left + 30, b.top + 20);
+                            }
+                          }}
+                          title={
+                            fetchErrors[r.path]
+                              ? "Background fetch failed: " +
+                                fetchErrors[r.path]
+                              : r.path
+                          }
+                        >
+                          <div className="repo-icon">
+                            <FolderGit2 size={19} />
+                          </div>
+                          <div className="repo-info">
+                            <strong>{r.name}</strong>
+                            <span>
+                              <GitBranch size={11} />
+                              {state?.branch ?? "Loading…"}
+                              {state && state.ahead > 0 && (
+                                <i className="ahead">↑{state.ahead}</i>
+                              )}
+                              {state && state.behind > 0 && (
+                                <i>↓{state.behind}</i>
+                              )}
+                            </span>
+                          </div>
+                          {fetchErrors[r.path] ? (
+                            <Bell size={12} className="fetch-error-icon" />
+                          ) : state && state.files.length > 0 ? (
+                            <span className="dirty-count">
+                              {state.files.length}
+                            </span>
+                          ) : (
+                            <span className="clean-dot" />
+                          )}
+                        </button>
+                        <button
+                          className="repo-options icon-button"
+                          aria-label={"Options for " + r.name}
+                          onClick={(e) => {
+                            const b = e.currentTarget.getBoundingClientRect();
+                            menu(b.right, b.bottom);
+                          }}
+                        >
+                          <MoreHorizontal size={15} />
+                        </button>
+                      </div>
+                    );
+                  })}
+            </section>
+          ))}
           {workspace.repos.length > 0 &&
             !workspace.repos.some((r) =>
               r.name.toLowerCase().includes(repoQuery.toLowerCase()),
@@ -1310,7 +1458,7 @@ export default function App() {
                         </div>
                         <div className="filter-select">
                           <GitBranch size={13} />
-                          <select
+                          <Select
                             value={branchFilter}
                             onChange={(e) => setBranchFilter(e.target.value)}
                           >
@@ -1318,7 +1466,7 @@ export default function App() {
                             {data.branches.map((b) => (
                               <option key={b.name}>{b.name}</option>
                             ))}
-                          </select>
+                          </Select>
                         </div>
                         <IconButton
                           title="Refresh history"
@@ -1680,7 +1828,9 @@ export default function App() {
                               {short(w.head)}
                             </span>
                           </div>
-                          <button onClick={() => void addRepo(w.path)}>
+                          <button
+                            onClick={() => void addRepo(w.path, repo?.group)}
+                          >
                             <ArrowUpRight size={14} />
                             Open
                           </button>
@@ -2022,10 +2172,17 @@ export default function App() {
           {desktop ? "Local workspace" : "Demo workspace"}
           <span className="status-divider" />
           {data ? (
-            <>
+            <button
+              className="status-branch-button"
+              aria-label="Switch branch from bottom bar"
+              disabled={!!busy}
+              onClick={() => showModal("checkout", "Switch branch")}
+              title="Switch branch"
+            >
               <GitBranch size={12} />
-              {data.branch}
-            </>
+              <span>{data.branch}</span>
+              <ChevronDown size={11} />
+            </button>
           ) : (
             "No repository selected"
           )}
@@ -2048,6 +2205,38 @@ export default function App() {
           </button>
         </span>
       </footer>
+      {groupMenu && (
+        <RepoContextMenu
+          x={groupMenu.x}
+          y={groupMenu.y}
+          name={groupMenu.name}
+          onClose={closeGroupMenu}
+          actions={[
+            {
+              label: "Rename group",
+              icon: <Settings2 size={14} />,
+              onClick: () =>
+                showModal(
+                  "group-rename",
+                  "Rename repository group",
+                  groupMenu.name,
+                ),
+            },
+            {
+              label: "Remove group",
+              icon: <Trash2 size={14} />,
+              disabled: workspace.groups.length < 2,
+              danger: true,
+              onClick: () =>
+                showModal(
+                  "group-remove",
+                  "Remove repository group?",
+                  groupMenu.name,
+                ),
+            },
+          ]}
+        />
+      )}
       {contextMenu && (
         <RepoContextMenu
           x={contextMenu.x}
@@ -2224,10 +2413,48 @@ export default function App() {
             {modal.kind === "settings" ? (
               <div className="settings-content">
                 <div className="preference-section">
+                  <h3>APP UPDATES</h3>
+                  <p>Installed version: {packageInfo.version}</p>
+                  <p>
+                    {updates.version
+                      ? `Version ${updates.version} is available.`
+                      : updates.phase === "checking"
+                        ? "Checking for updates…"
+                        : updates.checked && !updates.error
+                          ? "You’re up to date."
+                          : "Checks on startup and every 30 minutes."}
+                  </p>
+                  {updates.error && (
+                    <p className="fetch-error-text" role="alert">
+                      Could not check or install the update: {updates.error}
+                    </p>
+                  )}
+                  {updates.version ? (
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={updateDisabled}
+                      onClick={applyUpdate}
+                    >
+                      <ArrowDownToLine size={14} />
+                      {updateLabel}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={updates.phase === "checking" || !desktop}
+                      onClick={() => void updates.checkNow()}
+                    >
+                      <RefreshCw size={14} />
+                      Check for updates
+                    </button>
+                  )}
+                </div>
+                <div className="preference-section">
                   <h3>APPEARANCE</h3>
                   <label>
                     Interface font
-                    <select
+                    <Select
                       value={preferences.fontFamily}
                       onChange={(e) =>
                         setPreferences((p) => ({
@@ -2247,7 +2474,7 @@ export default function App() {
                         System default
                       </option>
                       <option value="Consolas, monospace">Consolas</option>
-                    </select>
+                    </Select>
                   </label>
                   <label>
                     Font size{" "}
@@ -2287,7 +2514,7 @@ export default function App() {
                   <h3>BACKGROUND FETCH</h3>
                   <label>
                     Fetch interval
-                    <select
+                    <Select
                       value={preferences.fetchMinutes}
                       onChange={(e) =>
                         setPreferences((p) => ({
@@ -2302,7 +2529,7 @@ export default function App() {
                           Every {n} minute{n === 1 ? "" : "s"}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                   <p>
                     Fetches your registered repositories while Orbital is open.
@@ -2399,6 +2626,7 @@ export default function App() {
                 )}
                 {[
                   "worktree-remove",
+                  "group-remove",
                   "stash-drop",
                   "remove-repo",
                   "revert",
@@ -2406,15 +2634,17 @@ export default function App() {
                 ].includes(modal.kind) ? (
                   <div className="confirm-copy">
                     <p>
-                      {modal.kind === "worktree-remove"
-                        ? "This removes the worktree directory. Git will refuse if it contains uncommitted work."
-                        : modal.kind === "stash-drop"
-                          ? "This permanently removes the saved stash. Apply it first if you need those changes."
-                          : modal.kind === "remove-repo"
-                            ? "Remove this repository from your workspace. Files on disk are kept."
-                            : modal.kind === "revert"
-                              ? "Create a new commit that reverses this commit. Your existing history is preserved."
-                              : "Apply this commit’s changes to your current branch."}
+                      {modal.kind === "group-remove"
+                        ? `Repositories in this group will move to ${workspace.groups.find((g) => g !== modal.value) ?? "another group"}. Repository files stay on disk.`
+                        : modal.kind === "worktree-remove"
+                          ? "This removes the worktree directory. Git will refuse if it contains uncommitted work."
+                          : modal.kind === "stash-drop"
+                            ? "This permanently removes the saved stash. Apply it first if you need those changes."
+                            : modal.kind === "remove-repo"
+                              ? "Remove this repository from your workspace. Files on disk are kept."
+                              : modal.kind === "revert"
+                                ? "Create a new commit that reverses this commit. Your existing history is preserved."
+                                : "Apply this commit’s changes to your current branch."}
                     </p>
                     <code>{modal.value ?? active}</code>
                   </div>
@@ -2425,7 +2655,7 @@ export default function App() {
                     </p>
                     <label>
                       Branch
-                      <select
+                      <Select
                         required
                         value={form.value ?? modal.value ?? ""}
                         onChange={(e) =>
@@ -2438,7 +2668,7 @@ export default function App() {
                           .map((b) => (
                             <option key={b.name}>{b.name}</option>
                           ))}
-                      </select>
+                      </Select>
                     </label>
                   </>
                 ) : (
@@ -2446,7 +2676,7 @@ export default function App() {
                     {modal.kind === "worktree" && (
                       <label>
                         Branch mode
-                        <select
+                        <Select
                           value={form.mode ?? "new"}
                           onChange={(e) =>
                             setForm({ ...form, mode: e.target.value })
@@ -2458,35 +2688,37 @@ export default function App() {
                           <option value="existing">
                             Use an existing branch
                           </option>
-                        </select>
+                        </Select>
                       </label>
                     )}
                     <label>
-                      {modal.kind === "branch"
-                        ? "New branch name"
-                        : ["merge", "rebase", "branch-delete"].includes(
-                              modal.kind,
-                            )
-                          ? modal.kind === "merge"
-                            ? "Branch to merge"
-                            : modal.kind === "rebase"
-                              ? "Rebase onto"
-                              : "Branch to delete"
-                          : modal.kind === "tag"
-                            ? "Tag name"
-                            : modal.kind === "stash"
-                              ? "Stash description"
-                              : modal.kind === "worktree"
-                                ? "Worktree folder path"
-                                : ["clone", "remote"].includes(modal.kind)
-                                  ? "Remote URL"
-                                  : modal.kind === "organize"
-                                    ? "Display name"
-                                    : "Repository folder path"}
+                      {["group-add", "group-rename"].includes(modal.kind)
+                        ? "Group name"
+                        : modal.kind === "branch"
+                          ? "New branch name"
+                          : ["merge", "rebase", "branch-delete"].includes(
+                                modal.kind,
+                              )
+                            ? modal.kind === "merge"
+                              ? "Branch to merge"
+                              : modal.kind === "rebase"
+                                ? "Rebase onto"
+                                : "Branch to delete"
+                            : modal.kind === "tag"
+                              ? "Tag name"
+                              : modal.kind === "stash"
+                                ? "Stash description"
+                                : modal.kind === "worktree"
+                                  ? "Worktree folder path"
+                                  : ["clone", "remote"].includes(modal.kind)
+                                    ? "Remote URL"
+                                    : modal.kind === "organize"
+                                      ? "Display name"
+                                      : "Repository folder path"}
                       {["merge", "rebase", "branch-delete"].includes(
                         modal.kind,
                       ) ? (
-                        <select
+                        <Select
                           autoFocus
                           required
                           value={form.value ?? ""}
@@ -2505,7 +2737,7 @@ export default function App() {
                             .map((b) => (
                               <option key={b.name}>{b.name}</option>
                             ))}
-                        </select>
+                        </Select>
                       ) : (
                         <input
                           autoFocus
@@ -2514,7 +2746,9 @@ export default function App() {
                             form.value ??
                             (modal.kind === "organize"
                               ? (modalRepo?.name ?? "")
-                              : "")
+                              : modal.kind === "group-rename"
+                                ? (modal.value ?? "")
+                                : "")
                           }
                           onChange={(e) =>
                             setForm({ ...form, value: e.target.value })
@@ -2533,6 +2767,28 @@ export default function App() {
                         />
                       )}
                     </label>
+                    {["add", "init", "clone", "organize"].includes(
+                      modal.kind,
+                    ) && (
+                      <label>
+                        Repository group
+                        <Select
+                          value={
+                            form.group ??
+                            (modal.kind === "organize"
+                              ? modalRepo?.group
+                              : workspace.groups[0])
+                          }
+                          onChange={(e) =>
+                            setForm({ ...form, group: e.target.value })
+                          }
+                        >
+                          {workspace.groups.map((group) => (
+                            <option key={group}>{group}</option>
+                          ))}
+                        </Select>
+                      </label>
+                    )}
                     {modal.kind === "add" && (
                       <button
                         type="button"
@@ -2547,7 +2803,7 @@ export default function App() {
                       <label>
                         Branch name
                         {form.mode === "existing" ? (
-                          <select
+                          <Select
                             required
                             value={form.branch ?? ""}
                             onChange={(e) =>
@@ -2565,7 +2821,7 @@ export default function App() {
                               .map((b) => (
                                 <option key={b.name}>{b.name}</option>
                               ))}
-                          </select>
+                          </Select>
                         ) : (
                           <input
                             required

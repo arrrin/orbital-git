@@ -1,25 +1,29 @@
 {
   "name": "orbital-git",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "test": "vitest run",
+    "test:ui": "playwright test",
     "release:version": "node scripts/version.mjs",
     "version:check": "node scripts/version.mjs --check",
+    "updater:setup": "node scripts/setup-updater.mjs",
     "desktop": "node scripts/desktop.mjs dev",
     "desktop:build": "node scripts/desktop.mjs build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@tauri-apps/cli": "^2.0.0",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.9",
@@ -27,6 +31,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
     "jsdom": "^31.0.0",
+    "libsodium-wrappers": "^0.8.4",
     "prettier": "^3.9.10",
     "typescript": "~5.7.2",
     "vite": "^6.0.5",

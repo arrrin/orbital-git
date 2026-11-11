@@ -25,11 +25,12 @@ const subjects = [
   "Initial project structure",
 ];
 export const demoWorkspace: Workspace = {
+  groups: ["Workspace", "Open source"],
   repos: [
-    { name: "orbital", path: "/demo/orbital" },
-    { name: "design-system", path: "/demo/design-system" },
-    { name: "api-service", path: "/demo/api-service" },
-    { name: "rust-utils", path: "/demo/rust-utils" },
+    { name: "orbital", path: "/demo/orbital", group: "Workspace" },
+    { name: "design-system", path: "/demo/design-system", group: "Workspace" },
+    { name: "api-service", path: "/demo/api-service", group: "Workspace" },
+    { name: "rust-utils", path: "/demo/rust-utils", group: "Open source" },
   ],
 };
 export function demoSnapshot(path = "/demo/orbital"): Snapshot {

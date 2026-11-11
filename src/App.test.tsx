@@ -16,6 +16,7 @@ import { demoSnapshot, demoWorkspace } from "./demo";
 import { optimisticIndex } from "./index-state";
 import { preferenceKey } from "./preferences";
 import type { Snapshot } from "./types";
+import { check } from "@tauri-apps/plugin-updater";
 
 vi.mock("./api", () => ({
   desktop: true,
@@ -29,7 +30,9 @@ vi.mock("./api", () => ({
   },
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
+vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn() }));
 beforeEach(() => {
+  vi.mocked(check).mockResolvedValue(null);
   localStorage.clear();
   const states = new Map<string, Snapshot>();
   const state = (path: string) => {
@@ -137,10 +140,8 @@ describe("desktop workflows", () => {
     const user = await start();
     await user.click(screen.getByRole("button", { name: "Merge branch" }));
     const dialog = screen.getByRole("dialog");
-    await user.selectOptions(
-      within(dialog).getByRole("combobox"),
-      "feature/worktrees",
-    );
+    await user.click(within(dialog).getByRole("combobox"));
+    await user.click(screen.getByRole("option", { name: "feature/worktrees" }));
     await within(dialog).findByText(/2 commits to bring in/);
     await user.click(
       within(dialog).getByRole("button", { name: "Merge into main" }),
@@ -206,7 +207,7 @@ describe("desktop workflows", () => {
     await screen.findByText("Error: Authentication failed");
     expect(screen.queryByRole("status")).toBeNull();
   });
-  it("opens Changes by default and removes legacy group controls without losing repos", async () => {
+  it("opens Changes by default and restores repository groups without losing repos", async () => {
     vi.mocked(api.load).mockResolvedValue({
       ...structuredClone(demoWorkspace),
       groups: ["Old group"],
@@ -215,12 +216,76 @@ describe("desktop workflows", () => {
     expect(
       screen.getByRole("heading", { name: "Working changes" }),
     ).toBeTruthy();
-    expect(screen.queryByText("Old group")).toBeNull();
+    expect(screen.getByText("Old group")).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Create repository group" }),
-    ).toBeNull();
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: /^rust-utils/ })).toBeTruthy();
     expect(api.snapshot).toHaveBeenCalledTimes(1);
+  });
+  it("creates and removes a repository group without deleting repositories", async () => {
+    const user = await start();
+    await user.click(
+      screen.getByRole("button", { name: "Create repository group" }),
+    );
+    await user.type(
+      within(screen.getByRole("dialog")).getByLabelText("Group name"),
+      "Temporary",
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Confirm",
+      }),
+    );
+    await screen.findByText("Temporary");
+    await user.click(
+      screen.getByRole("button", { name: "Options for group Temporary" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Remove group" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Confirm",
+      }),
+    );
+    await waitFor(() => expect(screen.queryByText("Temporary")).toBeNull());
+    expect(api.execute).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /^orbitalmain/ })).toBeTruthy();
+  });
+  it("moves repositories to another group when their group is removed", async () => {
+    const user = await start();
+    await user.click(
+      screen.getByRole("button", { name: "Options for group Open source" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Remove group" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Confirm",
+      }),
+    );
+    await waitFor(() =>
+      expect(api.save).toHaveBeenCalledWith({
+        groups: ["Workspace"],
+        repos: demoWorkspace.repos.map((r) => ({ ...r, group: "Workspace" })),
+      }),
+    );
+    expect(screen.getByRole("button", { name: /^rust-utils/ })).toBeTruthy();
+  });
+  it("switches branches from the additional bottom-bar control", async () => {
+    const user = await start();
+    await user.click(
+      screen.getByRole("button", { name: "Switch branch from bottom bar" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("combobox", { name: "Branch" }));
+    await user.click(screen.getByRole("option", { name: "feature/worktrees" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Switch branch" }),
+    );
+    await waitFor(() =>
+      expect(api.execute).toHaveBeenCalledWith("/demo/orbital", "checkout", [
+        "feature/worktrees",
+      ]),
+    );
   });
   it("moves files immediately, serializes staging, and never reloads history or shows update toasts", async () => {
     const user = await start();
@@ -314,14 +379,14 @@ describe("desktop workflows", () => {
     expect(divider.getAttribute("aria-valuenow")).toBe("252");
     await user.click(screen.getByRole("button", { name: /Preferences/ }));
     const dialog = screen.getByRole("dialog");
-    await user.selectOptions(
-      within(dialog).getByLabelText("Interface font"),
-      "Arial, sans-serif",
+    await user.click(
+      within(dialog).getByRole("combobox", { name: "Interface font" }),
     );
-    await user.selectOptions(
-      within(dialog).getByLabelText("Fetch interval"),
-      "3",
+    await user.click(screen.getByRole("option", { name: "Arial" }));
+    await user.click(
+      within(dialog).getByRole("combobox", { name: "Fetch interval" }),
     );
+    await user.click(screen.getByRole("option", { name: "Every 3 minutes" }));
     fireEvent.change(
       within(dialog).getByRole("slider", { name: "Font size" }),
       { target: { value: "16" } },
@@ -369,9 +434,8 @@ describe("desktop workflows", () => {
     expect(api.execute).toHaveBeenCalledTimes(4);
     expect(screen.queryByRole("status")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Preferences/ }));
-    fireEvent.change(screen.getByLabelText("Fetch interval"), {
-      target: { value: "0" },
-    });
+    fireEvent.click(screen.getByRole("combobox", { name: "Fetch interval" }));
+    fireEvent.click(screen.getByRole("option", { name: "Off" }));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60000);
     });
@@ -392,6 +456,7 @@ describe("desktop workflows", () => {
     );
     await waitFor(() =>
       expect(api.save).toHaveBeenCalledWith({
+        groups: demoWorkspace.groups,
         repos: demoWorkspace.repos.filter((r) => r.name !== "rust-utils"),
       }),
     );

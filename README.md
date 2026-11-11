@@ -7,7 +7,10 @@ A local, graph-first desktop Git client built with **Rust + Tauri 2 + React**. I
 ## Included
 
 - Colored commit ancestry graph with merge lanes, branch and tag labels, author/SHA search, branch filtering, commit details, and file diffs.
-- A flat repository sidebar with quick switching, current branch, uncommitted file count, ahead/behind indicators, and a right-click menu for repository actions. Existing grouped workspaces keep all repositories when opened.
+- Repository groups in the sidebar, with create, rename, remove, and move-to-group controls. Removing a group moves its repositories to another group and keeps their files. Flat v0.2.0 workspaces are placed into a default Workspace group.
+- Quick repository switching, branch/status indicators, repository right-click menus, and an additional branch-switch button in the bottom bar.
+- Custom dropdowns and themed scrollbars, with scrolling contained inside app panes and dialogs.
+- Signed in-app updates: startup and periodic checks, an Update button when a newer published version is available, and download/install progress.
 - Changes opens by default. Staging and unstaging update immediately, queue index writes, and reconcile with lightweight status reads instead of reloading commit history. Routine staging has no success popups.
 - Draggable dividers for the repository sidebar, changed-file list, and graph inspector. Widths are remembered; arrow keys resize, and double-click resets a divider.
 - Preferences for interface font, font size, background fetch interval, and subtle animations. Reduced-motion preferences are respected.
@@ -82,7 +85,11 @@ git push origin v0.1.1
 
 `release:version` updates `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and the application's entry in `src-tauri/Cargo.lock`. The UI reads its version from `package.json`. Use `0.1.1` for fixes, `0.2.0` for a new feature release, and `1.0.0` for a stable milestone. The version helper currently supports stable `major.minor.patch` numbers. Each published version gets a new tag and release; old downloads remain available.
 
-These releases provide downloadable installers. Automatic in-app updates and Windows code signing are not configured. Users install a newer release by downloading and running its installer. GitHub release automation does not require the local Microsoft C++ Build Tools installation.
+The release workflow builds an installer, an updater signature, and `latest.json`, and uploads all three to the draft release and the workflow artifact. Publish the draft to make it available to the app's updater. Draft releases and CI artifacts are not offered as in-app updates. GitHub release automation does not require local Microsoft C++ Build Tools.
+
+Install v0.2.1 manually once if you are using v0.2.0 or earlier. From v0.2.1 onward, Orbital checks on startup and every 30 minutes; you can also check in Preferences. A newer published version shows an Update button. Updates download and install only when you click it, and the button waits for pending Git operations to finish. On Windows the updater closes the app, runs the installer, and restarts it.
+
+Updater signatures are configured using Tauri's updater signing system; this is separate from Windows Authenticode signing, which is not configured. The public key is committed in `tauri.conf.json`. The private key is stored outside Git at `~/.tauri/orbital-git.key` with restricted file permissions, and encrypted in the repository secret `TAURI_SIGNING_PRIVATE_KEY`. Back up the original key pair: future releases must use the same key. `npm run updater:setup` configures the secret using your existing GitHub Git credentials and refuses to replace an already configured key with a different one. The desktop build script uses the local key when available; CI release builds use the repository secret. PR checks build without generating updater artifacts and do not need signing secrets.
 
 Write release notes in `releases/<tag>.md` before committing and tagging a version; for example, `releases/v0.1.0.md` or `releases/v0.1.1.md`. The release workflow uses that file as the draft's description. If the file is absent, it falls back to GitHub-generated notes. For an existing draft release, paste the notes into its description and save it.
 
@@ -92,7 +99,7 @@ The Rust service runs your installed Git using argument arrays, without construc
 
 Pull is fast-forward only. For diverged branches, explicitly merge or rebase from the command palette. No force-push, hard reset, or automatic discard of changes is exposed. Merge conflicts remain in the working tree: open the repository in VS Code, resolve files, stage them in Changes, and continue the operation.
 
-Repositories are stored in `workspace.json` in Tauri's per-user application config directory. Legacy groups are ignored when loading and removed when the workspace is next saved; repository paths and display names are preserved. Appearance preferences, pane widths, and fetch interval are saved in the app's local webview storage.
+Repositories and groups are stored in `workspace.json` in Tauri's per-user application config directory. Existing group assignments are preserved when present. Flat workspace files load into a default Workspace group without losing repository paths or display names. Appearance preferences, pane widths, and fetch interval are saved in the app's local webview storage.
 
 The active repository's working status refreshes every three seconds and when Orbital regains focus; other sidebar statuses refresh every 15 seconds. Background fetch defaults to every five minutes for registered repositories while the app is open. Change the interval or disable it in Preferences. Automatic fetch never pulls or switches branches, does not show success popups, and does not start overlapping fetch cycles. Failures appear on the repository's sidebar indicator and in Preferences.
 
