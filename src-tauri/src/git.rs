@@ -49,6 +49,18 @@ pub struct Snapshot {
     remotes: Vec<String>,
     tags: Vec<String>,
     operation: String,
+    head: String,
+}
+
+#[derive(Serialize)]
+pub struct WorkingState {
+    branch: String,
+    upstream: String,
+    ahead: usize,
+    behind: usize,
+    files: Vec<FileStatus>,
+    operation: String,
+    head: String,
 }
 
 fn output(path: &str, args: &[&str]) -> Result<Output, String> {
@@ -57,6 +69,7 @@ fn output(path: &str, args: &[&str]) -> Result<Output, String> {
         .arg("-C")
         .arg(path)
         .args(args)
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .env("GIT_TERMINAL_PROMPT", "0");
     #[cfg(windows)]
     {
@@ -98,22 +111,16 @@ fn valid_file(value: &str) -> Result<(), String> {
         Ok(())
     }
 }
-pub fn snapshot(path: &str) -> Result<Snapshot, String> {
-    let root = git(path, &["rev-parse", "--show-toplevel"])?;
-    let branch =
-        git(path, &["symbolic-ref", "--short", "HEAD"]).unwrap_or_else(|_| "Detached HEAD".into());
-    let upstream = git(path, &["rev-parse", "--abbrev-ref", "@{upstream}"]).unwrap_or_default();
-    let counts = git(
-        path,
-        &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
-    )
-    .unwrap_or_default();
-    let mut counts = counts.split_whitespace().filter_map(|x| x.parse().ok());
-    let ahead = counts.next().unwrap_or(0);
-    let behind = counts.next().unwrap_or(0);
+pub fn working_state(path: &str) -> Result<WorkingState, String> {
     let raw = output(
         path,
-        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        &[
+            "status",
+            "--porcelain=v2",
+            "--branch",
+            "-z",
+            "--untracked-files=all",
+        ],
     )?;
     if !raw.status.success() {
         return Err(String::from_utf8_lossy(&raw.stderr).to_string());
@@ -121,22 +128,101 @@ pub fn snapshot(path: &str) -> Result<Snapshot, String> {
     let raw = String::from_utf8_lossy(&raw.stdout);
     let mut entries = raw.split('\0');
     let mut files = vec![];
+    let mut branch = String::new();
+    let mut upstream = String::new();
+    let mut head = String::new();
+    let mut ahead = 0;
+    let mut behind = 0;
     while let Some(line) = entries.next() {
-        if line.len() < 4 {
-            continue;
-        }
-        let index = &line[0..1];
-        let worktree = &line[1..2];
-        files.push(FileStatus {
-            path: line[3..].into(),
-            index: index.into(),
-            worktree: worktree.into(),
-            conflict: matches!(&line[..2], "DD" | "AU" | "UD" | "UA" | "DU" | "AA" | "UU"),
-        });
-        if index == "R" || index == "C" || worktree == "R" || worktree == "C" {
-            entries.next();
+        if let Some(value) = line.strip_prefix("# branch.head ") {
+            branch = if value == "(detached)" {
+                "Detached HEAD".into()
+            } else {
+                value.into()
+            };
+        } else if let Some(value) = line.strip_prefix("# branch.oid ") {
+            head = value.into();
+        } else if let Some(value) = line.strip_prefix("# branch.upstream ") {
+            upstream = value.into();
+        } else if let Some(value) = line.strip_prefix("# branch.ab ") {
+            let mut counts = value.split_whitespace();
+            ahead = counts
+                .next()
+                .and_then(|s| s.strip_prefix('+'))
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
+            behind = counts
+                .next()
+                .and_then(|s| s.strip_prefix('-'))
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
+        } else if let Some(file) = line.strip_prefix("? ") {
+            files.push(FileStatus {
+                path: file.into(),
+                index: "?".into(),
+                worktree: "?".into(),
+                conflict: false,
+            });
+        } else if line.starts_with("1 ") || line.starts_with("2 ") || line.starts_with("u ") {
+            let count = if line.starts_with("u ") {
+                11
+            } else if line.starts_with("2 ") {
+                10
+            } else {
+                9
+            };
+            let parts: Vec<_> = line.splitn(count, ' ').collect();
+            if parts.len() != count || parts[1].len() != 2 {
+                continue;
+            }
+            files.push(FileStatus {
+                path: parts[count - 1].into(),
+                index: parts[1][0..1].replace('.', " "),
+                worktree: parts[1][1..2].replace('.', " "),
+                conflict: line.starts_with("u "),
+            });
+            if line.starts_with("2 ") {
+                entries.next();
+            }
         }
     }
+    let gitdir = git(path, &["rev-parse", "--absolute-git-dir"])?;
+    let operation = [
+        ("MERGE_HEAD", "merge"),
+        ("rebase-merge", "rebase"),
+        ("rebase-apply", "rebase"),
+        ("CHERRY_PICK_HEAD", "cherry-pick"),
+    ]
+    .iter()
+    .find_map(|(file, name)| {
+        Path::new(&gitdir)
+            .join(file)
+            .exists()
+            .then(|| name.to_string())
+    })
+    .unwrap_or_default();
+    Ok(WorkingState {
+        branch,
+        upstream,
+        ahead,
+        behind,
+        files,
+        operation,
+        head,
+    })
+}
+
+pub fn snapshot(path: &str) -> Result<Snapshot, String> {
+    let root = git(path, &["rev-parse", "--show-toplevel"])?;
+    let WorkingState {
+        branch,
+        upstream,
+        ahead,
+        behind,
+        files,
+        operation,
+        head,
+    } = working_state(path)?;
     let log = git(
         path,
         &[
@@ -213,24 +299,6 @@ pub fn snapshot(path: &str) -> Result<Snapshot, String> {
             }
         })
         .collect();
-    let operation = [
-        ("MERGE_HEAD", "merge"),
-        ("rebase-merge", "rebase"),
-        ("rebase-apply", "rebase"),
-        ("CHERRY_PICK_HEAD", "cherry-pick"),
-    ]
-    .iter()
-    .find_map(|(file, name)| {
-        let file_path = git(path, &["rev-parse", "--git-path", file]).ok()?;
-        let file_path = Path::new(&file_path);
-        let full = if file_path.is_absolute() {
-            file_path.to_path_buf()
-        } else {
-            Path::new(path).join(file_path)
-        };
-        full.exists().then(|| name.to_string())
-    })
-    .unwrap_or_default();
     Ok(Snapshot {
         path: root,
         branch,
@@ -257,6 +325,7 @@ pub fn snapshot(path: &str) -> Result<Snapshot, String> {
             .map(String::from)
             .collect(),
         operation,
+        head,
     })
 }
 pub fn diff(
@@ -334,7 +403,9 @@ pub fn execute(path: &str, action: &str, args: &[String]) -> Result<String, Stri
         valid_ref(url)?;
         return git(path, &["clone", "--", url, arg(1)?]);
     }
-    git(path, &["rev-parse", "--show-toplevel"])?;
+    if matches!(action, "open-editor" | "open-diff" | "reveal") {
+        git(path, &["rev-parse", "--show-toplevel"])?;
+    }
     match action {
         "fetch" => git(path, &["fetch", "--all", "--prune"]),
         "pull" => git(path, &["pull", "--ff-only"]),
@@ -502,6 +573,19 @@ pub fn execute(path: &str, action: &str, args: &[String]) -> Result<String, Stri
             )
         }
         "open-editor" => launch_editor(path, None),
+        "reveal" => {
+            #[cfg(windows)]
+            let program = "explorer.exe";
+            #[cfg(target_os = "macos")]
+            let program = "open";
+            #[cfg(all(unix, not(target_os = "macos")))]
+            let program = "xdg-open";
+            Command::new(program)
+                .arg(path)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+            Ok(String::new())
+        }
         "open-diff" => {
             let file = arg(0)?;
             valid_file(file)?;
@@ -746,6 +830,36 @@ mod tests {
         assert!(diff(path, "file.txt", None, false)
             .unwrap()
             .contains("+saved work"));
+    }
+    #[test]
+    fn lightweight_status_handles_partial_staging_and_renames() {
+        let folder = repository();
+        let path = folder.path().to_str().unwrap();
+        let initial = working_state(path).unwrap();
+        assert_eq!(initial.branch, "main");
+        assert_eq!(initial.head, "(initial)");
+        commit_file(path, "old name.txt", "base\n");
+        std::fs::write(folder.path().join("old name.txt"), "staged\n").unwrap();
+        call(path, "stage", &["old name.txt"]).unwrap();
+        std::fs::write(folder.path().join("old name.txt"), "unstaged\n").unwrap();
+        let state = working_state(path).unwrap();
+        assert_eq!(state.files[0].index, "M");
+        assert_eq!(state.files[0].worktree, "M");
+        call(path, "stage", &["old name.txt"]).unwrap();
+        call(path, "commit", &["Prepare rename"]).unwrap();
+        std::fs::rename(
+            folder.path().join("old name.txt"),
+            folder.path().join("new 日本語 name.txt"),
+        )
+        .unwrap();
+        call(path, "stage-all", &[]).unwrap();
+        let state = working_state(path).unwrap();
+        assert_eq!(state.files.len(), 1);
+        assert_eq!(state.files[0].path, "new 日本語 name.txt");
+        assert_eq!(state.files[0].index, "R");
+        assert_eq!(state.head, snapshot(path).unwrap().commits[0].hash);
+        git(path, &["switch", "--detach"]).unwrap();
+        assert_eq!(working_state(path).unwrap().branch, "Detached HEAD");
     }
     #[test]
     fn remote_tracking_and_publishing_without_origin() {

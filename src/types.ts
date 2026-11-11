@@ -38,13 +38,16 @@ export interface Snapshot {
   remotes: string[];
   tags: string[];
   operation: string;
+  head: string;
 }
+export type WorkingState = Pick<
+  Snapshot,
+  "branch" | "upstream" | "ahead" | "behind" | "files" | "operation" | "head"
+>;
 export interface Repo {
   path: string;
   name: string;
-  group: string;
 }
 export interface Workspace {
   repos: Repo[];
-  groups: string[];
 }

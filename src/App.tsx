@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type CSSProperties,
 } from "react";
 import {
   Activity,
@@ -49,8 +50,19 @@ import {
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, desktop } from "./api";
 import packageInfo from "../package.json";
+import ResizeHandle from "./ResizeHandle";
+import RepoContextMenu from "./RepoContextMenu";
+import { defaults, preferenceKey, readPreferences } from "./preferences";
+import { optimisticIndex } from "./index-state";
 import { layoutGraph } from "./graph";
-import type { Commit, FileStatus, Repo, Snapshot, Workspace } from "./types";
+import type {
+  Commit,
+  FileStatus,
+  Repo,
+  Snapshot,
+  Workspace,
+  WorkingState,
+} from "./types";
 
 type Tab = "graph" | "changes" | "worktrees" | "stashes";
 type Modal = { kind: string; title: string; value?: string };
@@ -58,6 +70,15 @@ const short = (s: string) => s.slice(0, 7);
 const basename = (s: string) =>
   s.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? s;
 const staged = (f: FileStatus) => ![" ", "?"].includes(f.index);
+const sameWorkingState = (a: WorkingState | undefined, b: WorkingState) =>
+  !!a &&
+  a.head === b.head &&
+  a.branch === b.branch &&
+  a.upstream === b.upstream &&
+  a.ahead === b.ahead &&
+  a.behind === b.behind &&
+  a.operation === b.operation &&
+  JSON.stringify(a.files) === JSON.stringify(b.files);
 function relative(date: string) {
   const h = Math.max(0, Math.floor((Date.now() - Date.parse(date)) / 3600000));
   return h < 1
@@ -93,11 +114,10 @@ function IconButton({
 export default function App() {
   const [workspace, setWorkspace] = useState<Workspace>({
     repos: [],
-    groups: [],
   });
   const [active, setActive] = useState("");
   const [snapshots, setSnapshots] = useState<Record<string, Snapshot>>({});
-  const [tab, setTab] = useState<Tab>("graph");
+  const [tab, setTab] = useState<Tab>("changes");
   const [selected, setSelected] = useState<Commit | null>(null);
   const [query, setQuery] = useState("");
   const [repoQuery, setRepoQuery] = useState("");
@@ -107,11 +127,21 @@ export default function App() {
   const [toast, setToast] = useState("");
   const [modal, setModal] = useState<Modal | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
-  const [collapsed, setCollapsed] = useState<string[]>([]);
+  const [preferences, setPreferences] = useState(readPreferences);
+  const [contextMenu, setContextMenu] = useState<{
+    repo: Repo;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [summaries, setSummaries] = useState<Record<string, WorkingState>>({});
+  const [indexPending, setIndexPending] = useState<Record<string, number>>({});
+  const [fetchErrors, setFetchErrors] = useState<Record<string, string>>({});
+  const [lastFetched, setLastFetched] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [file, setFile] = useState("");
   const [fileStaged, setFileStaged] = useState(false);
   const [patch, setPatch] = useState("");
+  const [diffNonce, setDiffNonce] = useState(0);
   const [commitFiles, setCommitFiles] = useState<string[]>([]);
   const [palette, setPalette] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
@@ -124,6 +154,40 @@ export default function App() {
   const mounted = useRef(true);
   const lock = useRef(false);
   const diffGeneration = useRef(0);
+  const snapshotsRef = useRef(snapshots);
+  snapshotsRef.current = snapshots;
+  const indexQueues = useRef(new Map<string, Promise<boolean>>());
+  const statusRequests = useRef(
+    new Map<string, { epoch: number; promise: Promise<void> }>(),
+  );
+  const fullRequests = useRef(
+    new Map<string, { epoch: number; promise: Promise<void> }>(),
+  );
+  const epochs = useRef(new Map<string, number>());
+  const fetchInProgress = useRef(new Map<string, Promise<string>>());
+  const fetchCycle = useRef(false);
+  const modalRepo = workspace.repos.find(
+    (r) => r.path === (modal?.value ?? active),
+  );
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--ui-font",
+      preferences.fontFamily,
+    );
+    document.documentElement.style.setProperty(
+      "--ui-font-size",
+      `${preferences.fontSize}px`,
+    );
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(preferenceKey, JSON.stringify(preferences));
+      } catch {
+        /* Settings remain usable if storage is unavailable. */
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [preferences]);
   useEffect(() => {
     if (!modal && !palette) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -161,7 +225,10 @@ export default function App() {
       .load()
       .then((w) => {
         if (!mounted.current) return;
-        setWorkspace(w);
+        // Legacy groups are discarded; repository paths and display names are kept.
+        setWorkspace({
+          repos: w.repos.map(({ path, name }) => ({ path, name })),
+        });
         setActive(w.repos[0]?.path ?? "");
         setReady(true);
       })
@@ -175,9 +242,68 @@ export default function App() {
   }, []);
   const refresh = useCallback(async (path: string) => {
     if (!path) return;
-    const next = await api.snapshot(path);
-    if (mounted.current) setSnapshots((s) => ({ ...s, [path]: next }));
+    const existing = fullRequests.current.get(path);
+    const epoch = epochs.current.get(path) ?? 0;
+    if (existing?.epoch === epoch) return existing.promise;
+    const request = (async () => {
+      const next = await api.snapshot(path);
+      if (
+        mounted.current &&
+        (epochs.current.get(path) ?? 0) === epoch &&
+        !indexQueues.current.has(path)
+      ) {
+        setSnapshots((s) => ({ ...s, [path]: next }));
+        setSummaries((s) => ({ ...s, [path]: next }));
+      }
+    })();
+    fullRequests.current.set(path, { epoch, promise: request });
+    try {
+      await request;
+    } finally {
+      if (fullRequests.current.get(path)?.promise === request)
+        fullRequests.current.delete(path);
+    }
   }, []);
+  const refreshWorking = useCallback(
+    async (path: string) => {
+      if (indexQueues.current.has(path)) return;
+      const existing = statusRequests.current.get(path);
+      const epoch = epochs.current.get(path) ?? 0;
+      if (existing?.epoch === epoch) return existing.promise;
+      const request = (async () => {
+        const next = await api.workingState(path);
+        if (
+          !mounted.current ||
+          (epochs.current.get(path) ?? 0) !== epoch ||
+          indexQueues.current.has(path)
+        )
+          return;
+        setSummaries((s) =>
+          sameWorkingState(s[path], next) ? s : { ...s, [path]: next },
+        );
+        const previous = snapshotsRef.current[path];
+        setSnapshots((s) =>
+          !s[path] || sameWorkingState(s[path], next)
+            ? s
+            : { ...s, [path]: { ...s[path], ...next } },
+        );
+        if (
+          previous &&
+          previous.head !== next.head &&
+          activeRef.current === path
+        )
+          await refresh(path);
+      })();
+      statusRequests.current.set(path, { epoch, promise: request });
+      try {
+        await request;
+      } finally {
+        if (statusRequests.current.get(path)?.promise === request)
+          statusRequests.current.delete(path);
+      }
+    },
+    [refresh],
+  );
   useEffect(() => {
     if (!ready) return;
     let cancelled = false;
@@ -185,7 +311,7 @@ export default function App() {
       for (const r of workspace.repos) {
         if (cancelled) return;
         try {
-          await refresh(r.path);
+          await refreshWorking(r.path);
         } catch (e) {
           if (!cancelled && r.path === activeRef.current) setError(String(e));
         }
@@ -195,20 +321,41 @@ export default function App() {
     const timer = setInterval(() => {
       if (!lock.current) void update();
     }, 15000);
+    const activeTimer = setInterval(() => {
+      if (!lock.current && activeRef.current)
+        void refreshWorking(activeRef.current).catch((e) =>
+          setError(String(e)),
+        );
+    }, 3000);
+    const focus = () => {
+      setDiffNonce((n) => n + 1);
+      if (!lock.current && activeRef.current)
+        void refreshWorking(activeRef.current).catch((e) =>
+          setError(String(e)),
+        );
+    };
+    window.addEventListener("focus", focus);
     return () => {
       cancelled = true;
       clearInterval(timer);
+      clearInterval(activeTimer);
+      window.removeEventListener("focus", focus);
     };
-  }, [workspace.repos, ready, refresh]);
+  }, [workspace.repos, ready, refreshWorking]);
   useEffect(() => {
     setSelected(null);
     setFile("");
     setPatch("");
-    setTab("graph");
+    setTab("changes");
     setBranchFilter("all");
     setQuery("");
     setError("");
-  }, [active]);
+    ++diffGeneration.current;
+    if (active)
+      void (
+        snapshotsRef.current[active] ? refreshWorking(active) : refresh(active)
+      ).catch((e) => setError(String(e)));
+  }, [active, refresh, refreshWorking]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 4500);
@@ -238,16 +385,83 @@ export default function App() {
       cancelled = true;
     };
   }, [modal?.kind, form.value, active, data?.branch]);
+  const changeIndex = useCallback(
+    (action: string, args: string[], path: string): Promise<boolean> => {
+      epochs.current.set(path, (epochs.current.get(path) ?? 0) + 1);
+      setError("");
+      setSnapshots((s) =>
+        s[path]
+          ? {
+              ...s,
+              [path]: {
+                ...s[path],
+                files: optimisticIndex(s[path].files, action, args[0]),
+              },
+            }
+          : s,
+      );
+      setIndexPending((p) => ({ ...p, [path]: (p[path] ?? 0) + 1 }));
+      const previous = indexQueues.current.get(path) ?? Promise.resolve(true);
+      const task: Promise<boolean> = previous
+        .catch(() => false)
+        .then(async () => {
+          try {
+            await api.execute(path, action, args);
+            return true;
+          } catch (e) {
+            setError(String(e));
+            return false;
+          }
+        });
+      indexQueues.current.set(path, task);
+      return task.finally(async () => {
+        if (indexQueues.current.get(path) === task) {
+          indexQueues.current.delete(path);
+          try {
+            await refreshWorking(path);
+          } catch (e) {
+            setError(String(e));
+          }
+        }
+        setIndexPending((p) => ({
+          ...p,
+          [path]: Math.max(0, (p[path] ?? 1) - 1),
+        }));
+      });
+    },
+    [refreshWorking],
+  );
   const run = useCallback(
     async (action: string, args: string[] = [], path = active) => {
+      if (["stage", "unstage", "stage-all"].includes(action))
+        return changeIndex(action, args, path);
       if (lock.current) return false;
       lock.current = true;
       setBusy(action);
       setError("");
       try {
-        const result = await api.execute(path, action, args);
-        if (action !== "clone") await refresh(path);
-        setToast(result || "Repository updated");
+        await indexQueues.current.get(path);
+        epochs.current.set(path, (epochs.current.get(path) ?? 0) + 1);
+        const result = await ((action === "fetch" &&
+          fetchInProgress.current.get(path)) ||
+          api.execute(path, action, args));
+        if (action === "fetch") {
+          setLastFetched((s) => ({ ...s, [path]: new Date().toISOString() }));
+          setFetchErrors((s) => ({ ...s, [path]: "" }));
+        }
+        if (!["clone", "open-editor", "open-diff", "reveal"].includes(action))
+          await refresh(path);
+        if (!["open-editor", "open-diff", "reveal"].includes(action))
+          setToast(
+            result ||
+              ({
+                fetch: "Remotes fetched",
+                commit: "Commit created",
+                pull: "Branch pulled",
+                push: "Branch pushed",
+              }[action] ??
+                "Git operation completed"),
+          );
         return true;
       } catch (e) {
         setError(String(e));
@@ -258,8 +472,61 @@ export default function App() {
         setBusy("");
       }
     },
-    [active, refresh],
+    [active, refresh, changeIndex],
   );
+  useEffect(() => {
+    if (!ready || !desktop || !preferences.fetchMinutes) return;
+    let cancelled = false;
+    const fetchAll = async () => {
+      if (fetchCycle.current) return;
+      fetchCycle.current = true;
+      try {
+        for (const r of workspace.repos) {
+          if (cancelled) return;
+          if (
+            lock.current ||
+            indexQueues.current.has(r.path) ||
+            fetchInProgress.current.has(r.path)
+          )
+            continue;
+          const operation = api.execute(r.path, "fetch", []);
+          fetchInProgress.current.set(r.path, operation);
+          try {
+            await operation;
+            if (cancelled) return;
+            setLastFetched((s) => ({
+              ...s,
+              [r.path]: new Date().toISOString(),
+            }));
+            setFetchErrors((s) => ({ ...s, [r.path]: "" }));
+            if (activeRef.current === r.path) await refresh(r.path);
+            else await refreshWorking(r.path);
+          } catch (e) {
+            if (!cancelled)
+              setFetchErrors((s) => ({ ...s, [r.path]: String(e) }));
+          } finally {
+            fetchInProgress.current.delete(r.path);
+          }
+        }
+      } finally {
+        fetchCycle.current = false;
+      }
+    };
+    const timer = setInterval(
+      () => void fetchAll(),
+      preferences.fetchMinutes * 60000,
+    );
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [
+    ready,
+    preferences.fetchMinutes,
+    workspace.repos,
+    refresh,
+    refreshWorking,
+  ]);
   const save = async (w: Workspace) => {
     try {
       await api.save(w);
@@ -270,10 +537,7 @@ export default function App() {
       return false;
     }
   };
-  const addRepo = async (
-    path: string,
-    group = workspace.groups[0] ?? "Workspace",
-  ) => {
+  const addRepo = async (path: string) => {
     try {
       const snapshot = await api.snapshot(path);
       const existing = workspace.repos.find(
@@ -285,12 +549,9 @@ export default function App() {
       }
       const next = {
         ...workspace,
-        groups: workspace.groups.includes(group)
-          ? workspace.groups
-          : [...workspace.groups, group],
         repos: [
           ...workspace.repos,
-          { path: snapshot.path, name: basename(snapshot.path), group },
+          { path: snapshot.path, name: basename(snapshot.path) },
         ],
       };
       if (await save(next)) {
@@ -331,6 +592,10 @@ export default function App() {
     setFile(name);
     setFileStaged(isStaged);
     setPatch("Loading diff…");
+    if (!revision) {
+      setDiffNonce((n) => n + 1);
+      return;
+    }
     try {
       const result = await api.diff(active, name, revision, isStaged);
       if (gen === diffGeneration.current)
@@ -341,6 +606,47 @@ export default function App() {
       if (gen === diffGeneration.current) setPatch(String(e));
     }
   };
+  const filesFingerprint = JSON.stringify(data?.files);
+  useEffect(() => {
+    if (tab !== "changes" || !file || indexPending[active]) return;
+    const status = snapshotsRef.current[active]?.files.find(
+      (f) => f.path === file,
+    );
+    if (!status) {
+      setFile("");
+      setPatch("");
+      return;
+    }
+    const nextStaged =
+      staged(status) && (fileStaged || status.worktree === " ");
+    if (nextStaged !== fileStaged) {
+      setFileStaged(nextStaged);
+      return;
+    }
+    const generation = ++diffGeneration.current;
+    api
+      .diff(active, file, null, nextStaged)
+      .then((result) => {
+        if (generation === diffGeneration.current)
+          setPatch(
+            result || "No text changes. This may be a binary file or a rename.",
+          );
+      })
+      .catch((e) => {
+        if (generation === diffGeneration.current) setPatch(String(e));
+      });
+    return () => {
+      ++diffGeneration.current;
+    };
+  }, [
+    active,
+    file,
+    fileStaged,
+    tab,
+    filesFingerprint,
+    indexPending[active],
+    diffNonce,
+  ]);
   const chooseCommit = async (c: Commit) => {
     setSelected(c);
     setFile("");
@@ -398,7 +704,7 @@ export default function App() {
         .toLowerCase()
         .includes(query.toLowerCase()),
     );
-  }, [data, query, branchFilter]);
+  }, [data?.commits, query, branchFilter]);
   const graph = useMemo(() => layoutGraph(commits), [commits]);
   const localBranches =
     data?.branches.filter((b) => !(b.remote ?? b.name.startsWith("origin/"))) ??
@@ -406,22 +712,12 @@ export default function App() {
   const submitModal = async () => {
     if (!modal) return;
     const value = form.value?.trim() ?? "";
-    if (modal.kind === "group") {
-      if (
-        value &&
-        !workspace.groups.includes(value) &&
-        (await save({ ...workspace, groups: [...workspace.groups, value] }))
-      )
-        setModal(null);
-      return;
-    }
     if (modal.kind === "add") {
-      await addRepo(value, form.group || workspace.groups[0]);
+      await addRepo(value);
       return;
     }
     if (modal.kind === "init") {
-      if (await run("init", [], value))
-        await addRepo(value, form.group || workspace.groups[0]);
+      if (await run("init", [], value)) await addRepo(value);
       return;
     }
     if (modal.kind === "remote") {
@@ -429,14 +725,12 @@ export default function App() {
         setModal(null);
       return;
     }
-    if (modal.kind === "organize" && repo) {
+    if (modal.kind === "organize" && modalRepo) {
       if (
         await save({
           ...workspace,
           repos: workspace.repos.map((r) =>
-            r.path === active
-              ? { ...r, group: form.group || r.group, name: value || r.name }
-              : r,
+            r.path === modalRepo.path ? { ...r, name: value || r.name } : r,
           ),
         })
       )
@@ -444,13 +738,15 @@ export default function App() {
       return;
     }
     if (modal.kind === "remove-repo") {
+      const target = modal.value ?? active;
       if (
         await save({
           ...workspace,
-          repos: workspace.repos.filter((r) => r.path !== active),
+          repos: workspace.repos.filter((r) => r.path !== target),
         })
       ) {
-        setActive(workspace.repos.find((r) => r.path !== active)?.path ?? "");
+        if (active === target)
+          setActive(workspace.repos.find((r) => r.path !== target)?.path ?? "");
         setModal(null);
       }
       return;
@@ -464,7 +760,7 @@ export default function App() {
       }
       const destination = parent.replace(/[\\/]$/, "") + "/" + form.name.trim();
       if (await run("clone", [value, destination], parent))
-        await addRepo(destination, form.group || workspace.groups[0]);
+        await addRepo(destination);
       return;
     }
     if (modal.kind === "worktree") {
@@ -560,7 +856,17 @@ export default function App() {
   ];
 
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      data-animations={preferences.animations}
+      style={
+        {
+          "--sidebar-width": `${preferences.sidebarWidth}px`,
+          "--files-width": `${preferences.filesWidth}px`,
+          "--inspector-width": `${preferences.inspectorWidth}px`,
+        } as CSSProperties
+      }
+    >
       <header className="titlebar">
         <div className="brand">
           <div className="orbital-logo">
@@ -581,15 +887,24 @@ export default function App() {
         </div>
       </header>
       <aside className="sidebar">
+        <ResizeHandle
+          label="Resize repository sidebar"
+          value={preferences.sidebarWidth}
+          min={170}
+          max={420}
+          onChange={(value) =>
+            setPreferences((p) => ({ ...p, sidebarWidth: value }))
+          }
+          onReset={() =>
+            setPreferences((p) => ({
+              ...p,
+              sidebarWidth: defaults.sidebarWidth,
+            }))
+          }
+        />
         <div className="sidebar-heading">
-          <span>EXPLORER</span>
+          <span>REPOSITORIES</span>
           <div>
-            <IconButton
-              title="Create repository group"
-              onClick={() => showModal("group", "Create a repository group")}
-            >
-              <FolderPlus size={15} />
-            </IconButton>
             <IconButton title="Open repository" onClick={() => void pick()}>
               <Plus size={17} />
             </IconButton>
@@ -604,69 +919,81 @@ export default function App() {
           />
           <kbd>/</kbd>
         </div>
-        <div className="repository-groups">
-          {workspace.groups.map((group) => (
-            <section className="repo-group" key={group}>
-              <button
-                className="group-label"
-                onClick={() =>
-                  setCollapsed((c) =>
-                    c.includes(group)
-                      ? c.filter((x) => x !== group)
-                      : [...c, group],
-                  )
-                }
-              >
-                {collapsed.includes(group) ? (
-                  <ChevronRight size={13} />
-                ) : (
-                  <ChevronDown size={13} />
-                )}
-                <Folder size={13} />
-                <span>{group}</span>
-                <span className="count">
-                  {workspace.repos.filter((r) => r.group === group).length}
-                </span>
-              </button>
-              {!collapsed.includes(group) &&
-                workspace.repos
-                  .filter(
-                    (r) =>
-                      r.group === group &&
-                      r.name.toLowerCase().includes(repoQuery.toLowerCase()),
-                  )
-                  .map((r) => {
-                    const s = snapshots[r.path];
-                    return (
-                      <button
-                        key={r.path}
-                        className={`repo-item ${active === r.path ? "active" : ""}`}
-                        onClick={() => setActive(r.path)}
-                      >
-                        <div className="repo-icon">
-                          <FolderGit2 size={19} />
-                        </div>
-                        <div className="repo-info">
-                          <strong>{r.name}</strong>
-                          <span>
-                            <GitBranch size={11} />
-                            {s?.branch ?? "Loading…"}
-                            {s && s.ahead > 0 && (
-                              <i className="ahead">↑{s.ahead}</i>
-                            )}
-                            {s && s.behind > 0 && <i>↓{s.behind}</i>}
-                          </span>
-                        </div>
-                        {s && s.files.length > 0 ? (
-                          <span className="dirty-count">{s.files.length}</span>
-                        ) : (
-                          <span className="clean-dot" />
+        <div className="repository-list">
+          {workspace.repos
+            .filter((r) =>
+              r.name.toLowerCase().includes(repoQuery.toLowerCase()),
+            )
+            .map((r) => {
+              const state = snapshots[r.path] ?? summaries[r.path];
+              const menu = (x: number, y: number) =>
+                setContextMenu({ repo: r, x, y });
+              return (
+                <div className="repo-entry" key={r.path}>
+                  <button
+                    className={
+                      "repo-item " + (active === r.path ? "active" : "")
+                    }
+                    onClick={() => setActive(r.path)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      menu(e.clientX, e.clientY);
+                    }}
+                    onKeyDown={(e) => {
+                      if (
+                        e.key === "ContextMenu" ||
+                        (e.shiftKey && e.key === "F10")
+                      ) {
+                        e.preventDefault();
+                        const b = e.currentTarget.getBoundingClientRect();
+                        menu(b.left + 30, b.top + 20);
+                      }
+                    }}
+                    title={
+                      fetchErrors[r.path]
+                        ? "Background fetch failed: " + fetchErrors[r.path]
+                        : r.path
+                    }
+                  >
+                    <div className="repo-icon">
+                      <FolderGit2 size={19} />
+                    </div>
+                    <div className="repo-info">
+                      <strong>{r.name}</strong>
+                      <span>
+                        <GitBranch size={11} />
+                        {state?.branch ?? "Loading…"}
+                        {state && state.ahead > 0 && (
+                          <i className="ahead">↑{state.ahead}</i>
                         )}
-                      </button>
-                    );
-                  })}
-            </section>
-          ))}
+                        {state && state.behind > 0 && <i>↓{state.behind}</i>}
+                      </span>
+                    </div>
+                    {fetchErrors[r.path] ? (
+                      <Bell size={12} className="fetch-error-icon" />
+                    ) : state && state.files.length > 0 ? (
+                      <span className="dirty-count">{state.files.length}</span>
+                    ) : (
+                      <span className="clean-dot" />
+                    )}
+                  </button>
+                  <button
+                    className="repo-options icon-button"
+                    aria-label={"Options for " + r.name}
+                    onClick={(e) => {
+                      const b = e.currentTarget.getBoundingClientRect();
+                      menu(b.right, b.bottom);
+                    }}
+                  >
+                    <MoreHorizontal size={15} />
+                  </button>
+                </div>
+              );
+            })}
+          {workspace.repos.length > 0 &&
+            !workspace.repos.some((r) =>
+              r.name.toLowerCase().includes(repoQuery.toLowerCase()),
+            ) && <p className="no-repos">No matching repositories</p>}
         </div>
         <button
           className="add-repository"
@@ -921,7 +1248,12 @@ export default function App() {
               <div className="tabs-spacer" />
               <span className="synced">
                 <span className="clean-dot" />
-                {busy ? (
+                {indexPending[active] ? (
+                  <>
+                    <LoaderCircle size={12} className="spin" />
+                    Saving index…
+                  </>
+                ) : busy ? (
                   <>
                     <LoaderCircle size={12} className="spin" />
                     {busy}…
@@ -953,6 +1285,7 @@ export default function App() {
               </div>
             ) : (
               <div
+                key={`${active}:${tab}`}
                 className={`content-area ${tab === "graph" ? "with-inspector" : ""}`}
               >
                 <section className="primary-panel">
@@ -1150,12 +1483,30 @@ export default function App() {
                   {tab === "changes" && (
                     <div className="changes-layout">
                       <div className="files-panel">
+                        <ResizeHandle
+                          label="Resize changed files pane"
+                          value={preferences.filesWidth}
+                          min={220}
+                          max={600}
+                          onChange={(value) =>
+                            setPreferences((p) => ({ ...p, filesWidth: value }))
+                          }
+                          onReset={() =>
+                            setPreferences((p) => ({
+                              ...p,
+                              filesWidth: defaults.filesWidth,
+                            }))
+                          }
+                        />
                         <div className="panel-title">
                           <strong>
                             Changed files <span>{data.files.length}</span>
                           </strong>
                           <button
-                            disabled={!!busy || !data.files.length}
+                            disabled={
+                              !!busy ||
+                              !data.files.some((f) => f.worktree !== " ")
+                            }
                             onClick={() => void run("stage-all")}
                           >
                             <CheckCheck size={14} />
@@ -1247,6 +1598,7 @@ export default function App() {
                             className="primary"
                             disabled={
                               !!busy ||
+                              !!indexPending[active] ||
                               !message.trim() ||
                               !data.files.some(staged) ||
                               data.files.some((f) => f.conflict)
@@ -1328,9 +1680,7 @@ export default function App() {
                               {short(w.head)}
                             </span>
                           </div>
-                          <button
-                            onClick={() => void addRepo(w.path, repo?.group)}
-                          >
+                          <button onClick={() => void addRepo(w.path)}>
                             <ArrowUpRight size={14} />
                             Open
                           </button>
@@ -1435,6 +1785,22 @@ export default function App() {
                 </section>
                 {tab === "graph" && (
                   <aside className="inspector">
+                    <ResizeHandle
+                      label="Resize graph inspector"
+                      direction={-1}
+                      value={preferences.inspectorWidth}
+                      min={200}
+                      max={480}
+                      onChange={(value) =>
+                        setPreferences((p) => ({ ...p, inspectorWidth: value }))
+                      }
+                      onReset={() =>
+                        setPreferences((p) => ({
+                          ...p,
+                          inspectorWidth: defaults.inspectorWidth,
+                        }))
+                      }
+                    />
                     {selected ? (
                       <>
                         <div className="inspector-title">
@@ -1682,6 +2048,69 @@ export default function App() {
           </button>
         </span>
       </footer>
+      {contextMenu && (
+        <RepoContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          name={contextMenu.repo.name}
+          onClose={closeContextMenu}
+          actions={[
+            {
+              label: "Open repository",
+              icon: <FolderGit2 size={15} />,
+              onClick: () => setActive(contextMenu.repo.path),
+            },
+            {
+              label: "Open in VS Code",
+              icon: <Code2 size={15} />,
+              disabled: !!busy,
+              onClick: () => void run("open-editor", [], contextMenu.repo.path),
+            },
+            {
+              label: "Reveal in file manager",
+              icon: <Folder size={15} />,
+              disabled: !!busy,
+              onClick: () => void run("reveal", [], contextMenu.repo.path),
+            },
+            {
+              label: "Fetch remotes",
+              icon: <RefreshCw size={15} />,
+              disabled: !!busy,
+              onClick: () => void run("fetch", [], contextMenu.repo.path),
+            },
+            {
+              label: "Copy repository path",
+              icon: <Copy size={15} />,
+              onClick: () =>
+                void navigator.clipboard
+                  .writeText(contextMenu.repo.path)
+                  .then(() => setToast("Repository path copied"))
+                  .catch((e) => setError(String(e))),
+            },
+            {
+              label: "Rename in sidebar",
+              icon: <Settings2 size={15} />,
+              onClick: () =>
+                showModal(
+                  "organize",
+                  "Rename repository",
+                  contextMenu.repo.path,
+                ),
+            },
+            {
+              label: "Remove from workspace",
+              icon: <Trash2 size={15} />,
+              danger: true,
+              onClick: () =>
+                showModal(
+                  "remove-repo",
+                  "Remove from workspace?",
+                  contextMenu.repo.path,
+                ),
+            },
+          ]}
+        />
+      )}
       {toast && (
         <div className="toast" role="status">
           <Check size={16} />
@@ -1749,7 +2178,7 @@ export default function App() {
                   >
                     <FolderGit2 size={17} />
                     {r.name}
-                    <span>{r.group}</span>
+                    <span>{basename(r.path)}</span>
                   </button>
                 ))}
             </div>
@@ -1794,35 +2223,144 @@ export default function App() {
             <h2 id="modal-title">{modal.title}</h2>
             {modal.kind === "settings" ? (
               <div className="settings-content">
-                <p>
-                  Orbital uses your installed Git, SSH keys, credential manager,
-                  and Git identity. Credentials stay with Git.
-                </p>
-                <div>
-                  <span>Open command palette</span>
+                <div className="preference-section">
+                  <h3>APPEARANCE</h3>
+                  <label>
+                    Interface font
+                    <select
+                      value={preferences.fontFamily}
+                      onChange={(e) =>
+                        setPreferences((p) => ({
+                          ...p,
+                          fontFamily: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value={'"Segoe UI", system-ui, sans-serif'}>
+                        Segoe UI
+                      </option>
+                      <option value="Inter, system-ui, sans-serif">
+                        Inter
+                      </option>
+                      <option value="Arial, sans-serif">Arial</option>
+                      <option value="system-ui, sans-serif">
+                        System default
+                      </option>
+                      <option value="Consolas, monospace">Consolas</option>
+                    </select>
+                  </label>
+                  <label>
+                    Font size{" "}
+                    <span className="preference-value">
+                      {preferences.fontSize}px
+                    </span>
+                    <input
+                      aria-label="Font size"
+                      type="range"
+                      min="10"
+                      max="18"
+                      step="1"
+                      value={preferences.fontSize}
+                      onChange={(e) =>
+                        setPreferences((p) => ({
+                          ...p,
+                          fontSize: Number(e.target.value),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={preferences.animations}
+                      onChange={(e) =>
+                        setPreferences((p) => ({
+                          ...p,
+                          animations: e.target.checked,
+                        }))
+                      }
+                    />
+                    Subtle interface animations
+                  </label>
+                </div>
+                <div className="preference-section">
+                  <h3>BACKGROUND FETCH</h3>
+                  <label>
+                    Fetch interval
+                    <select
+                      value={preferences.fetchMinutes}
+                      onChange={(e) =>
+                        setPreferences((p) => ({
+                          ...p,
+                          fetchMinutes: Number(e.target.value),
+                        }))
+                      }
+                    >
+                      <option value="0">Off</option>
+                      {[1, 3, 5, 10, 15].map((n) => (
+                        <option key={n} value={n}>
+                          Every {n} minute{n === 1 ? "" : "s"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p>
+                    Fetches your registered repositories while Orbital is open.
+                    Working files and your current branch stay in place.
+                  </p>
+                  {lastFetched[active] && (
+                    <p>
+                      Last fetched:{" "}
+                      {new Date(lastFetched[active]).toLocaleTimeString()}
+                    </p>
+                  )}
+                  {Object.entries(fetchErrors)
+                    .filter(([, value]) => value)
+                    .map(([path, value]) => (
+                      <p className="fetch-error-text" key={path}>
+                        {basename(path)}: {value}
+                      </p>
+                    ))}
+                </div>
+                <div className="preference-section">
+                  <h3>WORKSPACE</h3>
+                  <p>
+                    Drag a pane divider to resize. Use arrow keys for precise
+                    adjustments; double-click to reset a pane.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPreferences((p) => ({
+                        ...p,
+                        sidebarWidth: defaults.sidebarWidth,
+                        filesWidth: defaults.filesWidth,
+                        inspectorWidth: defaults.inspectorWidth,
+                      }))
+                    }
+                  >
+                    Reset pane sizes
+                  </button>
+                </div>
+                <div className="shortcut-row">
+                  <span>Command palette</span>
                   <kbd>Ctrl K</kbd>
                 </div>
-                <div>
+                <div className="shortcut-row">
                   <span>Refresh repository</span>
                   <kbd>Ctrl R</kbd>
                 </div>
-                <div>
-                  <span>Close dialog</span>
-                  <kbd>Esc</kbd>
-                </div>
-                <p>
-                  Repositories refresh every 15 seconds. Pull uses fast-forward
-                  only. Workspace groups are saved in your application config
-                  directory.
-                </p>
-                <p>
-                  VS Code diffs compare snapshots of the selected staged,
-                  unstaged, or committed file. Temporary diff files live in your
-                  system temp directory under orbital-diffs.
-                </p>
                 <p className="muted">
-                  Version {packageInfo.version} · Tauri + Rust · Local first
+                  Version {packageInfo.version} · Tauri + Rust · Settings save
+                  automatically.
                 </p>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => setModal(null)}
+                >
+                  Done
+                </button>
               </div>
             ) : (
               <>
@@ -1924,29 +2462,27 @@ export default function App() {
                       </label>
                     )}
                     <label>
-                      {modal.kind === "group"
-                        ? "Group name"
-                        : modal.kind === "branch"
-                          ? "New branch name"
-                          : ["merge", "rebase", "branch-delete"].includes(
-                                modal.kind,
-                              )
-                            ? modal.kind === "merge"
-                              ? "Branch to merge"
-                              : modal.kind === "rebase"
-                                ? "Rebase onto"
-                                : "Branch to delete"
-                            : modal.kind === "tag"
-                              ? "Tag name"
-                              : modal.kind === "stash"
-                                ? "Stash description"
-                                : modal.kind === "worktree"
-                                  ? "Worktree folder path"
-                                  : ["clone", "remote"].includes(modal.kind)
-                                    ? "Remote URL"
-                                    : modal.kind === "organize"
-                                      ? "Display name"
-                                      : "Repository folder path"}
+                      {modal.kind === "branch"
+                        ? "New branch name"
+                        : ["merge", "rebase", "branch-delete"].includes(
+                              modal.kind,
+                            )
+                          ? modal.kind === "merge"
+                            ? "Branch to merge"
+                            : modal.kind === "rebase"
+                              ? "Rebase onto"
+                              : "Branch to delete"
+                          : modal.kind === "tag"
+                            ? "Tag name"
+                            : modal.kind === "stash"
+                              ? "Stash description"
+                              : modal.kind === "worktree"
+                                ? "Worktree folder path"
+                                : ["clone", "remote"].includes(modal.kind)
+                                  ? "Remote URL"
+                                  : modal.kind === "organize"
+                                    ? "Display name"
+                                    : "Repository folder path"}
                       {["merge", "rebase", "branch-delete"].includes(
                         modal.kind,
                       ) ? (
@@ -1977,7 +2513,7 @@ export default function App() {
                           value={
                             form.value ??
                             (modal.kind === "organize"
-                              ? (repo?.name ?? "")
+                              ? (modalRepo?.name ?? "")
                               : "")
                           }
                           onChange={(e) =>
@@ -2079,23 +2615,6 @@ export default function App() {
                         />
                       </label>
                     )}
-                    {["add", "clone", "organize"].includes(modal.kind) && (
-                      <label>
-                        Repository group
-                        <select
-                          value={
-                            form.group ?? repo?.group ?? workspace.groups[0]
-                          }
-                          onChange={(e) =>
-                            setForm({ ...form, group: e.target.value })
-                          }
-                        >
-                          {workspace.groups.map((g) => (
-                            <option key={g}>{g}</option>
-                          ))}
-                        </select>
-                      </label>
-                    )}
                   </>
                 )}
                 {error && (
@@ -2109,7 +2628,11 @@ export default function App() {
                       type="button"
                       className="danger-text"
                       onClick={() =>
-                        showModal("remove-repo", "Remove from workspace?")
+                        showModal(
+                          "remove-repo",
+                          "Remove from workspace?",
+                          modalRepo?.path,
+                        )
                       }
                     >
                       Remove

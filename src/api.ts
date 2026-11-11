@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { demoSnapshot, demoWorkspace } from "./demo";
-import type { Snapshot, Workspace } from "./types";
+import type { Snapshot, Workspace, WorkingState } from "./types";
 export const desktop = isTauri();
 export const api = {
   load: () =>
@@ -12,6 +12,10 @@ export const api = {
   snapshot: (path: string) =>
     desktop
       ? invoke<Snapshot>("repository", { path })
+      : Promise.resolve(demoSnapshot(path)),
+  workingState: (path: string) =>
+    desktop
+      ? invoke<WorkingState>("working_state", { path })
       : Promise.resolve(demoSnapshot(path)),
   execute: (path: string, action: string, args: string[] = []) =>
     desktop

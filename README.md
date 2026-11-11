@@ -7,7 +7,10 @@ A local, graph-first desktop Git client built with **Rust + Tauri 2 + React**. I
 ## Included
 
 - Colored commit ancestry graph with merge lanes, branch and tag labels, author/SHA search, branch filtering, commit details, and file diffs.
-- Persistent repository groups, fast sidebar switching, current branch, uncommitted file count, ahead/behind indicators, and background refresh every 15 seconds.
+- A flat repository sidebar with quick switching, current branch, uncommitted file count, ahead/behind indicators, and a right-click menu for repository actions. Existing grouped workspaces keep all repositories when opened.
+- Changes opens by default. Staging and unstaging update immediately, queue index writes, and reconcile with lightweight status reads instead of reloading commit history. Routine staging has no success popups.
+- Draggable dividers for the repository sidebar, changed-file list, and graph inspector. Widths are remembered; arrow keys resize, and double-click resets a divider.
+- Preferences for interface font, font size, background fetch interval, and subtle animations. Reduced-motion preferences are respected.
 - Open, initialize, and clone repositories; organize or remove them from the workspace without deleting repository files.
 - Fetch all remotes, fast-forward pull, and push. Publishing a branch sets its upstream; existing upstreams use your Git push configuration.
 - Create and switch branches, track remote branches, merge another branch into the current branch with a commit-count preview, rebase, and safely delete merged local branches.
@@ -89,7 +92,11 @@ The Rust service runs your installed Git using argument arrays, without construc
 
 Pull is fast-forward only. For diverged branches, explicitly merge or rebase from the command palette. No force-push, hard reset, or automatic discard of changes is exposed. Merge conflicts remain in the working tree: open the repository in VS Code, resolve files, stage them in Changes, and continue the operation.
 
-Repository groups are stored in `workspace.json` in Tauri's per-user application config directory. Diff snapshots live under your system temporary directory in `orbital-diffs`. Workspace removal keeps the repository on disk; worktree removal actually removes that worktree directory after Git's safety checks.
+Repositories are stored in `workspace.json` in Tauri's per-user application config directory. Legacy groups are ignored when loading and removed when the workspace is next saved; repository paths and display names are preserved. Appearance preferences, pane widths, and fetch interval are saved in the app's local webview storage.
+
+The active repository's working status refreshes every three seconds and when Orbital regains focus; other sidebar statuses refresh every 15 seconds. Background fetch defaults to every five minutes for registered repositories while the app is open. Change the interval or disable it in Preferences. Automatic fetch never pulls or switches branches, does not show success popups, and does not start overlapping fetch cycles. Failures appear on the repository's sidebar indicator and in Preferences.
+
+Diff snapshots live under your system temporary directory in `orbital-diffs`. Workspace removal keeps the repository on disk; worktree removal actually removes that worktree directory after Git's safety checks.
 
 ## Current limits
 

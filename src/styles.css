@@ -1,14 +1,9 @@
 :root {
-  font-family:
-    Inter,
-    "Segoe UI",
-    -apple-system,
-    BlinkMacSystemFont,
-    sans-serif;
+  font-family: var(--ui-font, "Segoe UI", system-ui, sans-serif);
   color: #d9dbe5;
   background: #111318;
   font-synthesis: none;
-  font-size: 12px;
+  font-size: var(--ui-font-size, 12px);
   font-weight: 400;
   color-scheme: dark;
   --muted: #777e90;
@@ -27,7 +22,7 @@
   border-radius: 6px;
   background: #292232;
   color: #bda4db;
-  font-size: 11px;
+  font-size: 0.9167rem;
   line-height: 1.7;
 }
 * {
@@ -92,7 +87,7 @@ button svg {
   flex-shrink: 0;
 }
 kbd {
-  font-size: 10px;
+  font-size: 0.8333rem;
   font-family: inherit;
   color: #838a9d;
   padding: 2px 5px;
@@ -127,7 +122,7 @@ kbd {
   color: var(--muted);
 }
 .small {
-  font-size: 11px;
+  font-size: 0.9167rem;
 }
 .clean-dot {
   display: inline-block;
@@ -162,7 +157,7 @@ kbd {
   min-width: 360px;
 }
 .brand strong {
-  font-size: 20px;
+  font-size: 1.6667rem;
   font-weight: 650;
   letter-spacing: -0.7px;
   color: #eeedf4;
@@ -188,7 +183,7 @@ kbd {
   margin: 0 5px 0 10px;
 }
 .title-caption {
-  font-size: 11px;
+  font-size: 0.9167rem;
   color: #828798;
 }
 .quick-search {
@@ -203,6 +198,11 @@ kbd {
 .quick-search kbd {
   margin-left: auto;
 }
+.quick-search > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .title-right {
   display: flex;
   gap: 18px;
@@ -212,7 +212,7 @@ kbd {
 }
 .version {
   color: #626a7b;
-  font-size: 10px;
+  font-size: 0.8333rem;
 }
 .avatar {
   display: grid;
@@ -223,7 +223,7 @@ kbd {
   border: 1px solid #665277;
   background: #46394e;
   color: #dfc5ee;
-  font-size: 11px;
+  font-size: 0.9167rem;
 }
 .sidebar {
   grid-column: 1;
@@ -239,7 +239,7 @@ kbd {
   align-items: center;
   justify-content: space-between;
   padding: 20px 15px 11px 20px;
-  font-size: 9px;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 1.3px;
   color: #778093;
@@ -263,7 +263,7 @@ kbd {
   min-width: 0;
   border: 0;
   background: transparent;
-  font-size: 11px;
+  font-size: 0.9167rem;
 }
 .repo-search kbd {
   border: 0;
@@ -281,13 +281,13 @@ kbd {
   border: 0;
   background: transparent;
   color: #8e96a7;
-  font-size: 10px;
+  font-size: 0.8333rem;
   padding: 6px 7px 10px;
   gap: 7px;
 }
 .group-label .count {
   margin-left: auto;
-  font-size: 9px;
+  font-size: 0.75rem;
   color: #626c80;
 }
 .repo-item {
@@ -325,7 +325,7 @@ kbd {
   gap: 7px;
 }
 .repo-info strong {
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 550;
   color: #c6cbd8;
   overflow: hidden;
@@ -338,7 +338,7 @@ kbd {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: 0.8333rem;
   color: #727e91;
 }
 .repo-info i {
@@ -350,7 +350,7 @@ kbd {
   color: #80bea6;
 }
 .dirty-count {
-  font-size: 9px;
+  font-size: 0.75rem;
   color: #c1a4f3;
   background: #4e3d63;
   padding: 2px 5px;
@@ -368,7 +368,7 @@ kbd {
   border: 1px dashed #323641;
   background: transparent;
   justify-content: flex-start;
-  font-size: 11px;
+  font-size: 0.9167rem;
   padding: 10px 12px;
   color: #7d879b;
 }
@@ -405,11 +405,11 @@ kbd {
   flex: 1;
 }
 .workspace-card strong {
-  font-size: 10px;
+  font-size: 0.8333rem;
   font-weight: 500;
 }
 .workspace-card span {
-  font-size: 9px;
+  font-size: 0.75rem;
   color: #717b8c;
 }
 .workspace-card > svg {
@@ -422,7 +422,7 @@ kbd {
   background: transparent;
   color: #9aa2b1;
   padding: 5px 7px;
-  font-size: 11px;
+  font-size: 0.9167rem;
 }
 .sidebar-bottom > button > span {
   margin-left: auto;
@@ -433,7 +433,7 @@ kbd {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  font-size: 9px;
+  font-size: 0.75rem;
   color: #596575;
   margin-top: 22px;
 }
@@ -471,7 +471,7 @@ kbd {
   color: #b6aec9;
 }
 .repo-breadcrumb strong {
-  font-size: 13px;
+  font-size: 1.0833rem;
   font-weight: 600;
   max-width: 170px;
   overflow: hidden;
@@ -485,13 +485,13 @@ kbd {
   background: transparent;
   padding: 5px;
   color: #c2b4df;
-  font-size: 11px;
+  font-size: 0.9167rem;
   max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .private-label {
-  font-size: 8px;
+  font-size: 0.6667rem;
   letter-spacing: 0.6px;
   padding: 3px 5px;
   border: 1px solid #333742;
@@ -506,7 +506,7 @@ kbd {
 .toolbar-actions > button {
   background: transparent;
   border-color: transparent;
-  font-size: 11px;
+  font-size: 0.9167rem;
   padding: 6px 9px;
   color: #9ba4b6;
 }
@@ -516,7 +516,7 @@ kbd {
   color: #d1b9fc;
 }
 .button-count {
-  font-size: 9px;
+  font-size: 0.75rem;
   background: #463455;
   border-radius: 3px;
   padding: 1px 4px;
@@ -528,7 +528,7 @@ kbd {
   margin: 0 6px;
 }
 .demo-banner {
-  font-size: 10px;
+  font-size: 0.8333rem;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -543,7 +543,7 @@ kbd {
   border: 1px solid #534267;
   border-radius: 3px;
   padding: 1px 5px;
-  font-size: 8px;
+  font-size: 0.6667rem;
   letter-spacing: 0.8px;
 }
 .error-banner,
@@ -556,7 +556,7 @@ kbd {
   background: #352127;
   color: #f1aaae;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 0.9167rem;
 }
 .error-banner > span {
   white-space: pre-wrap;
@@ -574,7 +574,7 @@ kbd {
   flex: 1;
 }
 .operation-banner button {
-  font-size: 10px;
+  font-size: 0.8333rem;
   padding: 5px 8px;
 }
 .view-heading {
@@ -586,13 +586,13 @@ kbd {
   gap: 15px;
 }
 .eyebrow {
-  font-size: 8px;
+  font-size: 0.6667rem;
   letter-spacing: 1.6px;
   font-weight: 600;
   color: #717b8e;
 }
 .view-heading h1 {
-  font-size: 25px;
+  font-size: 2.0833rem;
   letter-spacing: -0.8px;
   font-weight: 550;
   margin: 10px 0 8px;
@@ -608,7 +608,7 @@ kbd {
   background: #ac8fdf;
 }
 .view-heading p {
-  font-size: 11px;
+  font-size: 0.9167rem;
   color: #7d879b;
   margin: 0;
 }
@@ -618,7 +618,7 @@ kbd {
   padding-top: 17px;
 }
 .heading-actions > button {
-  font-size: 11px;
+  font-size: 0.9167rem;
   padding: 8px 12px;
 }
 .heading-actions > button:not(.primary) {
@@ -639,7 +639,7 @@ kbd {
   border-radius: 0;
   padding: 12px 0 14px;
   background: transparent;
-  font-size: 11px;
+  font-size: 0.9167rem;
   color: #838da0;
   position: relative;
   gap: 8px;
@@ -658,7 +658,7 @@ kbd {
 }
 .view-tabs > button > span {
   color: #8590a2;
-  font-size: 9px;
+  font-size: 0.75rem;
   border-radius: 4px;
   background: #252a34;
   padding: 1px 5px;
@@ -670,7 +670,7 @@ kbd {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 9px;
+  font-size: 0.75rem;
   color: #727f90;
 }
 .synced .clean-dot {
@@ -715,7 +715,7 @@ kbd {
   color: #69758a;
 }
 .graph-search input {
-  font-size: 10px;
+  font-size: 0.8333rem;
   border: 0;
   background: transparent;
   padding: 3px;
@@ -740,7 +740,7 @@ kbd {
   padding: 5px 0;
   border: 0;
   background: transparent;
-  font-size: 10px;
+  font-size: 0.8333rem;
   max-width: 135px;
   width: auto;
 }
@@ -775,18 +775,18 @@ kbd {
   gap: 13px;
 }
 .working-row strong {
-  font-size: 11px;
+  font-size: 0.9167rem;
   font-weight: 500;
 }
 .working-row .muted {
-  font-size: 10px;
+  font-size: 0.8333rem;
 }
 .working-badge {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 9px;
+  font-size: 0.75rem;
   color: #afa1c8;
   background: #292534;
   padding: 4px 6px;
@@ -800,7 +800,7 @@ kbd {
   border-bottom: 1px solid #252933;
   background: #15181f;
   color: #5b667b;
-  font-size: 8px;
+  font-size: 0.6667rem;
   letter-spacing: 0.8px;
   flex-shrink: 0;
 }
@@ -877,7 +877,7 @@ kbd {
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 9px;
+  font-size: 0.75rem;
   border: 1px solid #3e5c50;
   border-radius: 4px;
   padding: 3px 5px;
@@ -912,7 +912,7 @@ kbd {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #abb3c4;
-  font-size: 10px;
+  font-size: 0.8333rem;
 }
 .commit-author {
   display: flex;
@@ -920,7 +920,7 @@ kbd {
   gap: 6px;
   width: 110px;
   flex-shrink: 0;
-  font-size: 9px;
+  font-size: 0.75rem;
   color: #8b96a9;
   overflow: hidden;
 }
@@ -931,7 +931,7 @@ kbd {
   flex-shrink: 0;
   width: 19px;
   height: 19px;
-  font-size: 8px;
+  font-size: 0.6667rem;
   border: 1px solid #5b4867;
   background: #45374b;
   color: #cbb0db;
@@ -954,7 +954,7 @@ kbd {
 }
 .commit-hash {
   font-family: Consolas, monospace;
-  font-size: 10px;
+  font-size: 0.8333rem;
   width: 82px;
   flex-shrink: 0;
   display: flex;
@@ -964,7 +964,7 @@ kbd {
 }
 .commit-hash small {
   font:
-    8px "Segoe UI",
+    0.6667rem "Segoe UI",
     sans-serif;
   color: #59677c;
 }
@@ -973,7 +973,7 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 9px;
+  font-size: 0.75rem;
   color: #5f6d82;
   border-top: 1px solid var(--line);
   background: #161920;
@@ -993,7 +993,7 @@ kbd {
   height: 52px;
   padding: 0 17px;
   color: #7b869a;
-  font-size: 8px;
+  font-size: 0.6667rem;
   letter-spacing: 1.1px;
   border-bottom: 1px solid #252a33;
 }
@@ -1002,7 +1002,7 @@ kbd {
   border-bottom: 1px solid #272c35;
 }
 .inspector-section h3 {
-  font-size: 8px;
+  font-size: 0.6667rem;
   letter-spacing: 0.9px;
   color: #738095;
   display: flex;
@@ -1027,7 +1027,7 @@ kbd {
   justify-content: flex-start;
   background: transparent;
   border: 0;
-  font-size: 10px;
+  font-size: 0.8333rem;
   padding: 9px 8px;
   color: #8794a9;
 }
@@ -1070,18 +1070,18 @@ kbd {
   margin-bottom: 11px;
 }
 .sidebar-tip strong {
-  font-size: 11px;
+  font-size: 0.9167rem;
   font-weight: 500;
   color: #c5bed5;
 }
 .sidebar-tip p {
-  font-size: 10px;
+  font-size: 0.8333rem;
   color: #7b879d;
   line-height: 1.9;
   margin: 9px 0 14px;
 }
 .sidebar-tip button {
-  font-size: 8px;
+  font-size: 0.6667rem;
   border: 0;
   background: transparent;
   padding: 0;
@@ -1089,7 +1089,7 @@ kbd {
   gap: 6px;
 }
 .sidebar-tip kbd {
-  font-size: 8px;
+  font-size: 0.6667rem;
   padding: 2px 3px;
   border-color: #4a3f5b;
   color: #b6a1d0;
@@ -1100,7 +1100,7 @@ kbd {
   gap: 7px;
   align-items: center;
   justify-content: center;
-  font-size: 8px;
+  font-size: 0.6667rem;
   color: #515f74;
   padding: 20px 10px;
 }
@@ -1113,7 +1113,7 @@ kbd {
   background: #191b23;
   padding: 0 14px;
   color: #69768a;
-  font-size: 9px;
+  font-size: 0.75rem;
   gap: 10px;
 }
 .statusbar > span {
@@ -1128,7 +1128,7 @@ kbd {
   margin: 0 9px;
 }
 .statusbar button {
-  font-size: 9px;
+  font-size: 0.75rem;
   border: 0;
   background: transparent;
   padding: 0;
@@ -1136,7 +1136,7 @@ kbd {
   gap: 9px;
 }
 .statusbar kbd {
-  font-size: 8px;
+  font-size: 0.6667rem;
   border: 0;
   padding: 0;
   color: #96a1b6;
@@ -1166,13 +1166,13 @@ kbd {
   transform: rotate(-7deg);
 }
 .welcome h1 {
-  font-size: 42px;
+  font-size: 3.5rem;
   letter-spacing: -1.8px;
   font-weight: 550;
   margin: 15px 0 6px;
 }
 .welcome p {
-  font-size: 13px;
+  font-size: 1.0833rem;
   line-height: 1.9;
   color: #8791a5;
   margin-bottom: 26px;
@@ -1184,7 +1184,7 @@ kbd {
   border: 0;
   background: transparent;
   color: #9a88b9;
-  font-size: 11px;
+  font-size: 0.9167rem;
   margin-top: 12px;
 }
 .text-button:hover {
@@ -1202,13 +1202,13 @@ kbd {
   min-height: 200px;
 }
 .empty-state h3 {
-  font-size: 14px;
+  font-size: 1.1667rem;
   color: #b3b1c2;
   font-weight: 500;
   margin: 17px 0 3px;
 }
 .empty-state p {
-  font-size: 11px;
+  font-size: 0.9167rem;
   line-height: 1.9;
   color: #69758b;
 }
@@ -1246,22 +1246,22 @@ kbd {
   gap: 5px;
 }
 .panel-title strong {
-  font-size: 11px;
+  font-size: 0.9167rem;
   font-weight: 500;
 }
 .panel-title strong span {
-  font-size: 9px;
+  font-size: 0.75rem;
   color: #84809a;
   margin-left: 5px;
 }
 .panel-title > button {
-  font-size: 9px;
+  font-size: 0.75rem;
   padding: 5px 7px;
   background: transparent;
   color: #a39ab8;
 }
 .file-section-label {
-  font-size: 9px;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.8px;
   color: #727e91;
@@ -1286,7 +1286,7 @@ kbd {
   text-align: left;
   border: 0;
   background: transparent;
-  font-size: 10px;
+  font-size: 0.8333rem;
   padding: 8px;
   color: #929caf;
   gap: 9px;
@@ -1298,7 +1298,7 @@ kbd {
 }
 .status {
   color: #dfb46e;
-  font-size: 9px;
+  font-size: 0.75rem;
   font-family: Consolas, monospace;
 }
 .status.conflict {
@@ -1312,7 +1312,7 @@ kbd {
   flex-direction: column;
 }
 .commit-form label {
-  font-size: 8px;
+  font-size: 0.6667rem;
   letter-spacing: 1px;
   color: #7c8599;
   margin-bottom: 10px;
@@ -1322,11 +1322,11 @@ kbd {
   min-height: 95px;
   max-height: 220px;
   line-height: 1.6;
-  font-size: 11px;
+  font-size: 0.9167rem;
 }
 .commit-form > .primary {
   margin-top: 12px;
-  font-size: 11px;
+  font-size: 0.9167rem;
   padding: 10px;
 }
 .diff-viewer {
@@ -1345,7 +1345,7 @@ kbd {
   border-bottom: 1px solid var(--line);
   padding: 14px 16px;
   color: #8995a9;
-  font-size: 10px;
+  font-size: 0.8333rem;
   min-height: 53px;
 }
 .diff-heading > span {
@@ -1355,7 +1355,7 @@ kbd {
   text-overflow: ellipsis;
 }
 .diff-heading button {
-  font-size: 9px;
+  font-size: 0.75rem;
   padding: 5px 7px;
   background: transparent;
   color: #baa7d8;
@@ -1390,7 +1390,7 @@ kbd {
   color: #526176;
   text-align: right;
   padding: 4px 12px 3px 4px;
-  font-size: 10px;
+  font-size: 0.8333rem;
   font-family: Consolas, monospace;
   user-select: none;
   border-right: 1px solid #ffffff06;
@@ -1399,7 +1399,7 @@ kbd {
   margin: 0;
   padding: 3px 16px 3px 10px;
   font:
-    11px/1.6 Consolas,
+    0.9167rem/1.6 Consolas,
     "Courier New",
     monospace;
   tab-size: 4;
@@ -1417,18 +1417,18 @@ kbd {
   margin-bottom: 28px;
 }
 .cards-heading h2 {
-  font-size: 18px;
+  font-size: 1.5rem;
   font-weight: 500;
   letter-spacing: -0.4px;
   margin: 0 0 8px;
 }
 .cards-heading p {
   color: #768298;
-  font-size: 11px;
+  font-size: 0.9167rem;
   margin: 0;
 }
 .cards-heading button {
-  font-size: 11px;
+  font-size: 0.9167rem;
   padding: 9px 13px;
 }
 .worktree-card,
@@ -1458,7 +1458,7 @@ kbd {
 }
 .worktree-details h3,
 .stash-card h3 {
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 500;
   display: flex;
   align-items: center;
@@ -1466,7 +1466,7 @@ kbd {
   margin: 0 0 8px;
 }
 .worktree-details p {
-  font-size: 10px;
+  font-size: 0.8333rem;
   color: #78859b;
   margin: 0 0 10px;
   overflow: hidden;
@@ -1474,14 +1474,14 @@ kbd {
   white-space: nowrap;
 }
 .worktree-details > span {
-  font-size: 9px;
+  font-size: 0.75rem;
   color: #777091;
   display: flex;
   gap: 6px;
   align-items: center;
 }
 .pill {
-  font-size: 8px;
+  font-size: 0.6667rem;
   border: 1px solid #496153;
   background: #23362d;
   color: #8cbea0;
@@ -1490,7 +1490,7 @@ kbd {
 }
 .worktree-card > button:not(.icon-button),
 .stash-card > button:not(.icon-button) {
-  font-size: 10px;
+  font-size: 0.8333rem;
   background: #252331;
   border-color: #463b55;
   color: #b9a9d4;
@@ -1507,12 +1507,12 @@ kbd {
   max-width: 700px;
 }
 .info-card strong {
-  font-size: 11px;
+  font-size: 0.9167rem;
   font-weight: 500;
   color: #ac9bc2;
 }
 .info-card p {
-  font-size: 10px;
+  font-size: 0.8333rem;
   line-height: 1.8;
   color: #6f7b8f;
   margin: 7px 0 0;
@@ -1525,7 +1525,7 @@ kbd {
 }
 .stash-card code {
   color: #7b7293;
-  font-size: 10px;
+  font-size: 0.8333rem;
 }
 .commit-detail {
   padding: 20px 18px;
@@ -1543,7 +1543,7 @@ kbd {
   margin-bottom: 17px;
 }
 .commit-detail h2 {
-  font-size: 15px;
+  font-size: 1.25rem;
   font-weight: 500;
   line-height: 1.7;
   letter-spacing: -0.2px;
@@ -1557,25 +1557,25 @@ kbd {
   gap: 6px;
 }
 .detail-author strong {
-  font-size: 10px;
+  font-size: 0.8333rem;
   font-weight: 500;
   color: #acb3c3;
 }
 .detail-author > span:last-child {
   margin-left: auto;
-  font-size: 9px;
+  font-size: 0.75rem;
   color: #6d7890;
 }
 .sha-copy {
   margin: 15px 0 3px;
-  font-size: 10px;
+  font-size: 0.8333rem;
   color: #bca2e3;
   background: #292333;
   border-color: #483b58;
   gap: 35px;
 }
 .detail-date {
-  font-size: 9px;
+  font-size: 0.75rem;
   color: #6b7890;
 }
 .detail-actions {
@@ -1584,7 +1584,7 @@ kbd {
   margin-top: 17px;
 }
 .detail-actions button {
-  font-size: 9px;
+  font-size: 0.75rem;
   padding: 6px 8px;
   background: #24242f;
   color: #a89bbd;
@@ -1594,7 +1594,7 @@ kbd {
   justify-content: flex-start;
   background: transparent;
   border: 0;
-  font-size: 10px;
+  font-size: 0.8333rem;
   padding: 9px 5px;
   color: #a394bb;
 }
@@ -1613,19 +1613,19 @@ kbd {
 }
 .inspector-diff .diff-heading {
   padding: 10px 8px;
-  font-size: 9px;
+  font-size: 0.75rem;
   flex-wrap: wrap;
 }
 .inspector-diff .diff-line pre {
-  font-size: 9px;
+  font-size: 0.75rem;
 }
 .inspector-diff .line-number {
   width: 28px;
-  font-size: 8px;
+  font-size: 0.6667rem;
   padding-right: 6px;
 }
 .inspector-diff .diff-heading button {
-  font-size: 8px;
+  font-size: 0.6667rem;
 }
 .modal-backdrop {
   position: fixed;
@@ -1662,13 +1662,13 @@ kbd {
   border-radius: 10px;
 }
 .modal h2 {
-  font-size: 21px;
+  font-size: 1.75rem;
   font-weight: 500;
   letter-spacing: -0.5px;
   margin: 20px 0 23px;
 }
 .modal-description {
-  font-size: 11px;
+  font-size: 0.9167rem;
   line-height: 1.8;
   color: #929bb0;
   margin: -10px 0 20px;
@@ -1682,12 +1682,12 @@ kbd {
   flex-direction: column;
   gap: 9px;
   color: #9da4b6;
-  font-size: 11px;
+  font-size: 0.9167rem;
   margin: 17px 0;
 }
 .modal input,
 .modal select {
-  font-size: 12px;
+  font-size: 1rem;
   padding: 11px;
 }
 .modal-footer {
@@ -1700,15 +1700,15 @@ kbd {
   padding-top: 20px;
 }
 .modal-footer > button {
-  font-size: 11px;
+  font-size: 0.9167rem;
 }
 .browse-button {
   background: transparent;
-  font-size: 10px;
+  font-size: 0.8333rem;
   color: #b6a2d1;
 }
 .confirm-copy {
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.8;
   color: #939bb0;
 }
@@ -1720,7 +1720,7 @@ kbd {
   border: 1px solid #44364e;
   border-radius: 6px;
   padding: 10px;
-  font-size: 10px;
+  font-size: 0.8333rem;
 }
 .danger {
   background: #994452;
@@ -1734,7 +1734,7 @@ kbd {
   margin-right: auto;
 }
 .modal-error {
-  font-size: 10px;
+  font-size: 0.8333rem;
   color: #ef9ca5;
   background: #3b262e;
   border: 1px solid #60333e;
@@ -1745,7 +1745,7 @@ kbd {
   overflow: auto;
 }
 .settings-content {
-  font-size: 11px;
+  font-size: 0.9167rem;
   line-height: 1.9;
   color: #939cb0;
 }
@@ -1783,7 +1783,7 @@ kbd {
   background: transparent;
   border: 0;
   padding: 0;
-  font-size: 14px;
+  font-size: 1.1667rem;
 }
 .palette-search kbd {
   cursor: pointer;
@@ -1803,7 +1803,7 @@ kbd {
   background: transparent;
   padding: 12px;
   gap: 12px;
-  font-size: 12px;
+  font-size: 1rem;
   color: #a6aabd;
 }
 .palette-results > button:hover {
@@ -1813,7 +1813,7 @@ kbd {
 .palette-results > button > svg:last-child,
 .palette-results > button > span {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 0.8333rem;
   color: #6c768b;
 }
 .toast {
@@ -1830,7 +1830,7 @@ kbd {
   padding: 13px 14px;
   border-radius: 8px;
   z-index: 50;
-  font-size: 11px;
+  font-size: 0.9167rem;
   color: #c2b4d6;
 }
 .toast > svg {
@@ -1865,7 +1865,7 @@ kbd {
     padding-bottom: 30px;
   }
   .subject-text {
-    font-size: 11px;
+    font-size: 0.9167rem;
   }
 }
 @media (max-width: 1250px) {
@@ -1898,7 +1898,7 @@ kbd {
   }
   .commit-hash {
     width: 68px;
-    font-size: 9px;
+    font-size: 0.75rem;
   }
   .history-header > span:nth-child(4) {
     width: 68px;
@@ -1907,7 +1907,7 @@ kbd {
     display: none;
   }
   .subject-text {
-    font-size: 10px;
+    font-size: 0.8333rem;
   }
   .ref-labels {
     max-width: 48%;
@@ -1916,18 +1916,18 @@ kbd {
     min-width: 310px;
   }
   .title-caption {
-    font-size: 10px;
+    font-size: 0.8333rem;
   }
   .sidebar-tip {
     margin: 18px 10px;
     padding: 13px 10px;
   }
   .sidebar-tip button {
-    font-size: 8px;
+    font-size: 0.6667rem;
     gap: 4px;
   }
   .sidebar-tip kbd {
-    font-size: 7px;
+    font-size: 0.5833rem;
   }
   .files-panel {
     width: 300px;
@@ -1969,17 +1969,17 @@ kbd {
     max-width: 100px;
   }
   .heading-actions > button {
-    font-size: 10px;
+    font-size: 0.8333rem;
     padding: 8px;
   }
   .repo-toolbar {
     padding: 0 14px;
   }
   .view-heading h1 {
-    font-size: 23px;
+    font-size: 1.9167rem;
   }
   .view-heading p {
-    font-size: 10px;
+    font-size: 0.8333rem;
   }
   .heading-actions {
     gap: 6px;
@@ -1989,7 +1989,7 @@ kbd {
     gap: 8px;
   }
   .repo-info strong {
-    font-size: 11px;
+    font-size: 0.9167rem;
   }
   .workspace-card {
     padding: 8px 6px;
@@ -2014,5 +2014,251 @@ kbd {
   }
   .spin {
     animation: none;
+  }
+}
+
+/* User-sized panes keep the main view usable as the window gets smaller. */
+.app-shell {
+  grid-template-columns: clamp(170px, var(--sidebar-width, 242px), 32vw) minmax(
+      0,
+      1fr
+    );
+}
+.sidebar {
+  position: relative;
+  overflow: hidden;
+}
+.repository-list {
+  overflow: auto;
+  min-height: 60px;
+  padding: 0 9px 14px;
+  scrollbar-width: thin;
+}
+.sidebar-bottom {
+  flex-shrink: 0;
+}
+.repo-entry {
+  position: relative;
+}
+.repo-item {
+  padding-right: 33px;
+}
+.repo-options {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+}
+.repo-entry:hover .repo-options,
+.repo-entry:focus-within .repo-options {
+  opacity: 1;
+}
+.repo-item .dirty-count,
+.repo-item > .clean-dot,
+.repo-item > .fetch-error-icon {
+  margin-right: 3px;
+}
+.no-repos {
+  padding: 16px 10px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.fetch-error-icon,
+.fetch-error-text {
+  color: #e5ad74;
+}
+.files-panel {
+  position: relative;
+  width: clamp(220px, var(--files-width, 340px), 52%);
+}
+.inspector {
+  position: relative;
+  width: clamp(200px, var(--inspector-width, 255px), 42%);
+}
+.resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 8;
+  cursor: col-resize;
+  touch-action: none;
+  border-right: 2px solid transparent;
+  transition: border-color 0.15s;
+}
+.resize-handle.from-left {
+  right: auto;
+  left: 0;
+  border-right: 0;
+  border-left: 2px solid transparent;
+}
+.resize-handle:hover,
+.resize-handle:focus-visible {
+  border-color: #b79aff;
+  outline: none;
+  background: #b79aff18;
+}
+body.is-resizing,
+body.is-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+.repo-context-menu {
+  position: fixed;
+  z-index: 60;
+  width: 248px;
+  padding: 6px;
+  background: #22212c;
+  border: 1px solid #51415f;
+  border-radius: 9px;
+  box-shadow: 0 14px 50px #0009;
+}
+.menu-repo-name {
+  padding: 8px 10px 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #373140;
+  color: #9f91b4;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.repo-context-menu button {
+  width: 100%;
+  justify-content: flex-start;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  padding: 10px;
+  font-size: 0.9rem;
+  color: #b9afca;
+}
+.repo-context-menu button:hover,
+.repo-context-menu button:focus-visible {
+  background: #383043;
+  outline: none;
+}
+.repo-context-menu .danger-text {
+  margin-top: 4px;
+}
+.settings-content > .preference-section {
+  display: block;
+  border-bottom: 1px solid #37313f;
+  padding-bottom: 18px;
+  margin: 0 0 20px;
+}
+.preference-section h3 {
+  font-size: 0.7rem;
+  letter-spacing: 1.3px;
+  color: #aa95c2;
+}
+.preference-section label {
+  position: relative;
+}
+.preference-section p {
+  margin: 8px 0;
+  font-size: 0.85rem;
+  line-height: 1.8;
+}
+.preference-value {
+  position: absolute;
+  right: 0;
+  top: 0;
+  color: #c4a7ee;
+}
+.preference-section input[type="range"] {
+  accent-color: #b79aff;
+  padding: 0;
+}
+.preference-section .checkbox-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+}
+.checkbox-label input {
+  width: 14px;
+  height: 14px;
+  accent-color: #b79aff;
+}
+.settings-content > .shortcut-row {
+  display: flex;
+}
+.settings-content > .primary {
+  width: 100%;
+  margin-top: 10px;
+}
+.app-shell[data-animations="true"] button:active:not(:disabled) {
+  filter: brightness(1.12);
+}
+.app-shell[data-animations="true"] .modal,
+.app-shell[data-animations="true"] .palette {
+  animation: popup-in 160ms ease-out both;
+}
+.app-shell[data-animations="true"] .modal-backdrop {
+  animation: fade-in 120ms ease-out both;
+}
+.app-shell[data-animations="true"] .repo-context-menu {
+  animation: popup-in 120ms ease-out both;
+  transform-origin: top left;
+}
+.app-shell[data-animations="true"] .content-area {
+  animation: view-in 140ms ease-out both;
+}
+.app-shell[data-animations="true"] .file-row {
+  animation: file-in 100ms ease-out both;
+}
+.app-shell[data-animations="true"] .toast {
+  animation: view-in 160ms ease-out both;
+}
+.app-shell[data-animations="false"] *,
+.app-shell[data-animations="false"] *:before,
+.app-shell[data-animations="false"] *:after {
+  animation: none !important;
+  transition: none !important;
+}
+@keyframes popup-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes view-in {
+  from {
+    opacity: 0.55;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes file-in {
+  from {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *,
+  .app-shell *:before,
+  .app-shell *:after {
+    animation: none !important;
+    transition: none !important;
   }
 }
