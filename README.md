@@ -48,6 +48,39 @@ The Windows installer is generated in `src-tauri/target/release/bundle/nsis/`. T
 
 On Linux, use `cargo build --manifest-path src-tauri/Cargo.toml` after building the frontend. The configured installer target is Windows NSIS; use an appropriate Tauri bundle target when packaging for other platforms.
 
+## Release on GitHub
+
+The repository remote is `https://github.com/arrrin/orbital-git`. The `Release Windows` workflow builds on GitHub's Windows runner when you push a version tag. It checks that the tag matches all application version fields, runs tests, builds an NSIS installer, and attaches it to a **draft** GitHub release. No personal access token is needed: the workflow uses GitHub's built-in token with `contents: write` permission. Repository or organization policy must allow GitHub Actions to run.
+
+For the first release, commit the workflow and source changes before pushing the tag:
+
+```powershell
+git add .
+git commit -m "Set up versioned Windows releases"
+git push origin main
+git tag -a v0.1.0 -m "Orbital 0.1.0"
+git push origin v0.1.0
+```
+
+Watch the build under [Actions](https://github.com/arrrin/orbital-git/actions). Once it succeeds, open [Releases](https://github.com/arrrin/orbital-git/releases), edit the draft, review the notes and attached installer, and click **Publish release**. Users download the `.exe` from the release's Assets section. If a build fails, open the failed job, fix the issue, and make a new version; do not move an already published version tag.
+
+For the next version:
+
+```powershell
+npm run release:version -- 0.1.1
+npm run version:check
+npm test
+git add .
+git commit -m "Release 0.1.1"
+git push origin main
+git tag -a v0.1.1 -m "Orbital 0.1.1"
+git push origin v0.1.1
+```
+
+`release:version` updates `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and the application's entry in `src-tauri/Cargo.lock`. The UI reads its version from `package.json`. Use `0.1.1` for fixes, `0.2.0` for a new feature release, and `1.0.0` for a stable milestone. The version helper currently supports stable `major.minor.patch` numbers. Each published version gets a new tag and release; old downloads remain available.
+
+These releases provide downloadable installers. Automatic in-app updates and Windows code signing are not configured. Users install a newer release by downloading and running its installer. GitHub release automation does not require the local Microsoft C++ Build Tools installation.
+
 ## Git behavior
 
 The Rust service runs your installed Git using argument arrays, without constructing shell commands. It inherits your existing Git identity, hooks, SSH setup, signing settings, and credential manager. Terminal credential prompting is disabled so a background command cannot wait for an invisible password prompt. Configure authentication with Git or your credential manager before fetching or pushing private repositories.

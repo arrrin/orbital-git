@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, desktop } from "./api";
+import packageInfo from "../package.json";
 import { layoutGraph } from "./graph";
 import type { Commit, FileStatus, Repo, Snapshot, Workspace } from "./types";
 
@@ -575,7 +576,7 @@ export default function App() {
           <kbd>Ctrl K</kbd>
         </button>
         <div className="title-right">
-          <span className="version">v0.1.0</span>
+          <span className="version">v{packageInfo.version}</span>
           <span className="avatar">Y</span>
         </div>
       </header>
@@ -1820,7 +1821,7 @@ export default function App() {
                   system temp directory under orbital-diffs.
                 </p>
                 <p className="muted">
-                  Version 0.1.0 · Tauri + Rust · Local first
+                  Version {packageInfo.version} · Tauri + Rust · Local first
                 </p>
               </div>
             ) : (
