@@ -48,7 +48,9 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             if (-not ($existing | ConvertFrom-Json).isDraft) { throw 'This release is already published. Create a new version instead of replacing its files.' }
           } else {
-            gh release create "$env:RELEASE_TAG" --repo "$env:GITHUB_REPOSITORY" --verify-tag --draft --title "Orbital $env:RELEASE_TAG" --generate-notes
+            $notesPath = "releases/$env:RELEASE_TAG.md"
+            $notesArgs = if (Test-Path -LiteralPath $notesPath) { @('--notes-file', $notesPath) } else { @('--generate-notes') }
+            gh release create "$env:RELEASE_TAG" --repo "$env:GITHUB_REPOSITORY" --verify-tag --draft --title "Orbital $env:RELEASE_TAG" @notesArgs
             if ($LASTEXITCODE -ne 0) { throw 'Could not create the draft release.' }
           }
           foreach ($installer in $installers) {

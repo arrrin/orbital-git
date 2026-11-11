@@ -1,6 +1,6 @@
 [package]
 name = "orbital-git"
-version = "0.1.0"
+version = "0.1.1"
 description = "A focused, graph-first desktop Git client"
 edition = "2021"
 

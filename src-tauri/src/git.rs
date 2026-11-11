@@ -639,6 +639,9 @@ mod tests {
         git(path, &["init", "-b", "main"]).unwrap();
         git(path, &["config", "user.name", "Orbital Tests"]).unwrap();
         git(path, &["config", "user.email", "test@orbital.local"]).unwrap();
+        // Test fixtures must not inherit the machine's checkout conversion policy.
+        git(path, &["config", "core.autocrlf", "false"]).unwrap();
+        git(path, &["config", "core.eol", "lf"]).unwrap();
         folder
     }
     fn call(path: &str, action: &str, args: &[&str]) -> Result<String, String> {
@@ -725,6 +728,24 @@ mod tests {
         assert!(state.files.iter().any(|f| f.conflict));
         call(path, "abort", &["merge"]).unwrap();
         assert!(snapshot(path).unwrap().operation.is_empty());
+    }
+    #[test]
+    fn stash_roundtrip_with_autocrlf_enabled() {
+        let folder = repository();
+        let path = folder.path().to_str().unwrap();
+        git(path, &["config", "core.autocrlf", "true"]).unwrap();
+        commit_file(path, "file.txt", "base\n");
+        std::fs::write(folder.path().join("file.txt"), "saved work\n").unwrap();
+        call(path, "stash", &["Save work with checkout conversion"]).unwrap();
+        assert!(snapshot(path).unwrap().files.is_empty());
+        call(path, "stash-apply", &["stash@{0}"]).unwrap();
+        let contents = std::fs::read_to_string(folder.path().join("file.txt")).unwrap();
+        // Git may correctly restore LF as CRLF when autocrlf is enabled.
+        assert_eq!(contents.replace("\r\n", "\n"), "saved work\n");
+        assert_eq!(snapshot(path).unwrap().files.len(), 1);
+        assert!(diff(path, "file.txt", None, false)
+            .unwrap()
+            .contains("+saved work"));
     }
     #[test]
     fn remote_tracking_and_publishing_without_origin() {

@@ -81,6 +81,8 @@ git push origin v0.1.1
 
 These releases provide downloadable installers. Automatic in-app updates and Windows code signing are not configured. Users install a newer release by downloading and running its installer. GitHub release automation does not require the local Microsoft C++ Build Tools installation.
 
+Write release notes in `releases/<tag>.md` before committing and tagging a version; for example, `releases/v0.1.0.md` or `releases/v0.1.1.md`. The release workflow uses that file as the draft's description. If the file is absent, it falls back to GitHub-generated notes. For an existing draft release, paste the notes into its description and save it.
+
 ## Git behavior
 
 The Rust service runs your installed Git using argument arrays, without constructing shell commands. It inherits your existing Git identity, hooks, SSH setup, signing settings, and credential manager. Terminal credential prompting is disabled so a background command cannot wait for an invisible password prompt. Configure authentication with Git or your credential manager before fetching or pushing private repositories.
