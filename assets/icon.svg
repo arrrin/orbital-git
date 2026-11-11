@@ -1,4 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#2563eb"/>
-  <text x="32" y="32" dy="0.35em" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="26" font-weight="600" fill="#ffffff">OG</text>
+  <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#3f2e59"/><stop offset="1" stop-color="#17131f"/></linearGradient></defs>
+  <rect x="1" y="1" width="62" height="62" rx="17" fill="url(#bg)" stroke="#75608e" stroke-width="2"/>
+  <path d="M24 17v29m0-11c17 0 17-7 17-16" fill="none" stroke="#c5a6ff" stroke-width="3.5"/>
+  <g fill="#292033" stroke="#d6bfff" stroke-width="3"><circle cx="24" cy="17" r="4.5"/><circle cx="24" cy="46" r="4.5"/><circle cx="41" cy="18" r="4.5"/></g>
 </svg>
